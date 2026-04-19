@@ -1,0 +1,35 @@
+# Dependencies
+**/node_modules/
+**/__pycache__/
+**/.venv/
+**/venv/
+**/env/
+
+# IDEs and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Build outputs
+**/dist/
+**/build/
+**/.next/
+**/out/
+
+# Environment variables
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Logs
+**/*.log
+**/npm-debug.log*
+**/yarn-error.log*
+
+# Other
+.gemini/
+antigravity/
+brain/
+scratch/
