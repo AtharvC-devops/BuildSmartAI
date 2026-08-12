@@ -1,14 +1,186 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Search, DollarSign, BarChart3, ArrowRight, Shield, Sparkles, Clock } from "lucide-react";
-import { getServices } from "@/lib/api";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Search, DollarSign, BarChart3, ArrowRight, Shield,
+  Sparkles, Clock, Loader2, Layers, Building
+} from "lucide-react";
+import { getServices, predictCost, predictTime } from "@/lib/api";
 
 const fadeIn = (i = 0) => ({
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0, transition: { delay: i * 0.1 } },
 });
+
+const formatINR = (n) => {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  return `₹${n.toLocaleString("en-IN")}`;
+};
+
+function ServiceCard({ service, i }) {
+  const [expanded, setExpanded] = useState(false);
+  const [area, setArea] = useState(1500);
+  const [quality, setQuality] = useState(2);
+  const [floors, setFloors] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [prediction, setPrediction] = useState(null);
+
+  const handlePredict = async (e) => {
+    e.stopPropagation();
+    setLoading(true);
+    try {
+      const location_tier = 2; // Standard urban
+      const workers = 15;
+      const complexity = service.category === "construction" ? 3 : 2;
+
+      const [costRes, timeRes] = await Promise.all([
+        predictCost({ area, material_quality: quality, location_tier, floors }),
+        predictTime({ area, workers, complexity })
+      ]);
+
+      setPrediction({
+        cost: costRes.predicted_cost,
+        days: timeRes.estimated_days,
+        confidence: (costRes.confidence + timeRes.confidence) / 2,
+        fallback: costRes.fallback || timeRes.fallback,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div {...fadeIn(i)} className="glass-card p-5 flex flex-col justify-between relative overflow-hidden">
+      <div>
+        <div className="text-3xl mb-3">{service.icon}</div>
+        <h3 className="font-semibold text-slate-900 mb-1">{service.name}</h3>
+        <p className="text-sm text-slate-500 mb-4 leading-relaxed">{service.description}</p>
+        
+        <AnimatePresence mode="wait">
+          {!expanded ? (
+            <motion.div
+              key="static"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-4 text-xs text-slate-400 mb-5"
+            >
+              <span className="flex items-center gap-1 font-medium">
+                <DollarSign className="w-3.5 h-3.5" /> 
+                {formatINR(service.minBudget)} – {formatINR(service.maxBudget)}
+              </span>
+              <span className="flex items-center gap-1 font-medium">
+                <Clock className="w-3.5 h-3.5" /> {service.duration}
+              </span>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="interactive"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-3 mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600"
+            >
+              <div>
+                <div className="flex justify-between font-semibold mb-1">
+                  <span>Area: {area} sq ft</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="500" 
+                  max="8000" 
+                  step="100"
+                  value={area} 
+                  onChange={(e) => {
+                    setArea(parseInt(e.target.value));
+                    setPrediction(null);
+                  }}
+                  className="w-full accent-emerald-600 cursor-pointer"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold mb-1">Quality</label>
+                  <select 
+                    value={quality} 
+                    onChange={(e) => {
+                      setQuality(parseInt(e.target.value));
+                      setPrediction(null);
+                    }}
+                    className="w-full p-1.5 bg-white border border-slate-200 rounded-md text-[11px]"
+                  >
+                    <option value={1}>Basic</option>
+                    <option value={2}>Standard</option>
+                    <option value={3}>Premium</option>
+                    <option value={4}>Luxury</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Floors</label>
+                  <select 
+                    value={floors} 
+                    onChange={(e) => {
+                      setFloors(parseInt(e.target.value));
+                      setPrediction(null);
+                    }}
+                    className="w-full p-1.5 bg-white border border-slate-200 rounded-md text-[11px]"
+                  >
+                    <option value={1}>1 Floor</option>
+                    <option value={2}>2 Floors</option>
+                    <option value={3}>3 Floors</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button
+                type="button"
+                onClick={handlePredict}
+                disabled={loading}
+                className="w-full py-2 rounded-lg gradient-primary text-white font-bold text-[10px] flex items-center justify-center gap-1 disabled:opacity-50 hover:opacity-95 transition-opacity"
+              >
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                Predict AI Quote
+              </button>
+
+              {prediction && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 pt-2 border-t border-slate-200 space-y-1 text-slate-800"
+                >
+                  <div className="flex justify-between font-bold">
+                    <span>AI Cost:</span>
+                    <span className="text-emerald-700 font-black">{formatINR(prediction.cost)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>AI Timeline:</span>
+                    <span>{prediction.days} days ({Math.round(prediction.days / 30)} mos)</span>
+                  </div>
+                  <div className="text-[9px] text-slate-400 text-right flex justify-between mt-1">
+                    {prediction.fallback ? <span>⚠️ Fallback</span> : <span>🤖 Live ML Model</span>}
+                    <span>Confidence: {Math.round(prediction.confidence * 100)}%</span>
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-colors text-xs font-bold flex items-center justify-center gap-1 mt-2"
+      >
+        {expanded ? "Show Standard Prices" : "Customize AI Quote"}
+      </button>
+    </motion.div>
+  );
+}
 
 export default function CustomerHome() {
   const [services, setServices] = useState([]);
@@ -81,15 +253,7 @@ export default function CustomerHome() {
         <h2 className="text-xl font-bold text-slate-900 mb-5">Available Services</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {services.map((service, i) => (
-            <motion.div key={service.id} {...fadeIn(i)} className="glass-card p-5">
-              <div className="text-3xl mb-3">{service.icon}</div>
-              <h3 className="font-semibold text-slate-900 mb-1">{service.name}</h3>
-              <p className="text-sm text-slate-500 mb-3 leading-relaxed">{service.description}</p>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" /> ₹{(service.minBudget / 100000).toFixed(0)}L – ₹{(service.maxBudget / 100000).toFixed(0)}L</span>
-                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {service.duration}</span>
-              </div>
-            </motion.div>
+            <ServiceCard key={service.id} service={service} i={i} />
           ))}
         </div>
       </div>

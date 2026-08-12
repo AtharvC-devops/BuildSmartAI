@@ -70,4 +70,77 @@ const monthlyData = [
   { month: "Apr",  budget: 2100000,  actual: 2000000  },
 ];
 
-module.exports = { users, agents, projects, bookings, reviews, services, monthlyData };
+const suppliers = [
+  { id: 1, name: "Ultratech Cement Depot", material: "Cement", rating: 4.8, distance: 5, priceIndex: 1.05, availability: true, location: "Mumbai" },
+  { id: 2, name: "Ambuja Cement Supply", material: "Cement", rating: 4.5, distance: 12, priceIndex: 0.95, availability: true, location: "Mumbai" },
+  { id: 3, name: "ACC Cement Hub", material: "Cement", rating: 4.2, distance: 22, priceIndex: 0.85, availability: true, location: "Pune" },
+  { id: 4, name: "Tata Tiscon Steel Store", material: "Steel", rating: 4.9, distance: 8, priceIndex: 1.10, availability: true, location: "Mumbai" },
+  { id: 5, name: "JSW NeoSteel Traders", material: "Steel", rating: 4.6, distance: 15, priceIndex: 1.00, availability: true, location: "Mumbai" },
+  { id: 6, name: "Sail Steel Yards", material: "Steel", rating: 4.3, distance: 28, priceIndex: 0.90, availability: false, location: "Pune" },
+  { id: 7, name: "Lafarge Brickworks Ltd", material: "Bricks", rating: 4.4, distance: 18, priceIndex: 0.95, availability: true, location: "Pune" },
+  { id: 8, name: "JK Brick Kilns", material: "Bricks", rating: 4.1, distance: 30, priceIndex: 0.80, availability: true, location: "Mumbai" },
+  { id: 9, name: "Apex Clay Bricks", material: "Bricks", rating: 4.7, distance: 9, priceIndex: 1.15, availability: true, location: "Mumbai" },
+  { id: 10, name: "Reliable Sand & Aggregates", material: "Sand", rating: 4.5, distance: 14, priceIndex: 1.00, availability: true, location: "Mumbai" },
+  { id: 11, name: "Riverbed Sand Miners", material: "Sand", rating: 4.0, distance: 35, priceIndex: 0.85, availability: true, location: "Pune" },
+  { id: 12, name: "Asian Paints Exclusive", material: "Paint", rating: 4.9, distance: 3, priceIndex: 1.20, availability: true, location: "Mumbai" },
+  { id: 13, name: "Berger Paints Depot", material: "Paint", rating: 4.6, distance: 7, priceIndex: 1.00, availability: true, location: "Mumbai" },
+  { id: 14, name: "Nerolac Paint Hub", material: "Paint", rating: 4.2, distance: 15, priceIndex: 0.90, availability: true, location: "Pune" },
+];
+
+const milestones = [
+  // Sunrise Villa (Priya Sharma, Rajesh Kumar)
+  { id: 1, projectId: 1, name: "Site Planning & Permitting", status: "completed", date: "2026-01-20", remarks: "All approvals in place." },
+  { id: 2, projectId: 1, name: "Excavation & Foundation", status: "completed", date: "2026-03-10", remarks: "Foundation concrete poured." },
+  { id: 3, projectId: 1, name: "Framing & Structure", status: "in_progress", date: "2026-05-12", remarks: "Pillar casting active." },
+  { id: 4, projectId: 1, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
+  { id: 5, projectId: 1, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
+  { id: 6, projectId: 1, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
+
+  // Tech Park Phase 2 (Ananya Desai, Rajesh Kumar)
+  { id: 7, projectId: 2, name: "Site Planning & Permitting", status: "completed", date: "2025-09-10", remarks: "NOC secured." },
+  { id: 8, projectId: 2, name: "Excavation & Foundation", status: "completed", date: "2025-11-20", remarks: "Dual cell basement completed." },
+  { id: 9, projectId: 2, name: "Framing & Structure", status: "completed", date: "2026-02-28", remarks: "All 4 floors casted." },
+  { id: 10, projectId: 2, name: "Plumbing, Wiring & Plastering", status: "in_progress", date: "2026-05-01", remarks: "Electrical trunking underway." },
+  { id: 11, projectId: 2, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
+  { id: 12, projectId: 2, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
+
+  // Green Meadows Apartment (Suresh Reddy, Vikram Singh)
+  { id: 13, projectId: 3, name: "Site Planning & Permitting", status: "in_progress", date: "2026-04-10", remarks: "Zoning approval pending." },
+  { id: 14, projectId: 3, name: "Excavation & Foundation", status: "not_started", date: null, remarks: "" },
+  { id: 15, projectId: 3, name: "Framing & Structure", status: "not_started", date: null, remarks: "" },
+  { id: 16, projectId: 3, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
+  { id: 17, projectId: 3, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
+  { id: 18, projectId: 3, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
+
+  // City Mall Renovation (Ananya Desai, Rajesh Kumar)
+  { id: 19, projectId: 4, name: "Site Planning & Permitting", status: "completed", date: "2025-06-15", remarks: "Structural audit complete." },
+  { id: 20, projectId: 4, name: "Excavation & Foundation", status: "completed", date: "2025-08-01", remarks: "Footings reinforced." },
+  { id: 21, projectId: 4, name: "Framing & Structure", status: "completed", date: "2025-09-30", remarks: "Shell completed." },
+  { id: 22, projectId: 4, name: "Plumbing, Wiring & Plastering", status: "completed", date: "2025-11-15", remarks: "Fittings completed." },
+  { id: 23, projectId: 4, name: "Interior Finishing & Paint", status: "completed", date: "2025-12-10", remarks: "Cladding and paint finished." },
+  { id: 24, projectId: 4, name: "Final Walkthrough & Handover", status: "completed", date: "2025-12-20", remarks: "Project handed over to owners." },
+
+  // Lakeside Bungalow (Priya Sharma, Vikram Singh)
+  { id: 25, projectId: 5, name: "Site Planning & Permitting", status: "completed", date: "2026-02-20", remarks: "Sanctions active." },
+  { id: 26, projectId: 5, name: "Excavation & Foundation", status: "in_progress", date: "2026-03-05", remarks: "Excavation paused." },
+  { id: 27, projectId: 5, name: "Framing & Structure", status: "not_started", date: null, remarks: "" },
+  { id: 28, projectId: 5, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
+  { id: 29, projectId: 5, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
+  { id: 30, projectId: 5, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
+
+  // Warehouse Complex (Suresh Reddy, Rajesh Kumar)
+  { id: 31, projectId: 6, name: "Site Planning & Permitting", status: "completed", date: "2025-11-10", remarks: "Warehouse design approved." },
+  { id: 32, projectId: 6, name: "Excavation & Foundation", status: "completed", date: "2026-01-15", remarks: "Heavy columns footings completed." },
+  { id: 33, projectId: 6, name: "Framing & Structure", status: "in_progress", date: "2026-03-20", remarks: "Gantry girders installation." },
+  { id: 34, projectId: 6, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
+  { id: 35, projectId: 6, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
+  { id: 36, projectId: 6, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" }
+];
+
+const dailyLogs = [
+  { id: 1, projectId: 1, date: "2026-05-10", workers: 12, tasks: "Scaffolding erection on northern wing", cementBags: 15, steelTons: 0.2, bricks: 0 },
+  { id: 2, projectId: 1, date: "2026-05-11", workers: 14, tasks: "Beam reinforcement welding", cementBags: 5, steelTons: 0.8, bricks: 0 },
+  { id: 3, projectId: 2, date: "2026-05-09", workers: 22, tasks: "Electrical conduit wiring on 3rd floor", cementBags: 0, steelTons: 0.0, bricks: 0 },
+];
+
+module.exports = { users, agents, projects, bookings, reviews, services, monthlyData, suppliers, milestones, dailyLogs };
