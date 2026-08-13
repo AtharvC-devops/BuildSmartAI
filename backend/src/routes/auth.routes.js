@@ -29,6 +29,18 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Invalid role specified. Must be 'builder' or 'client'." });
     }
 
+    // Role-Specific Company Field Validation & Data Normalization
+    let normalizedCompany = null;
+    if (role === "builder") {
+      const trimmedCompany = typeof company === "string" ? company.trim() : "";
+      if (!trimmedCompany) {
+        return res.status(400).json({ error: "Company / Organization is required for Builder accounts." });
+      }
+      normalizedCompany = trimmedCompany;
+    } else if (role === "client") {
+      normalizedCompany = (typeof company === "string" && company.trim()) ? company.trim() : null;
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     // Application data-layer uniqueness check before insert
@@ -51,8 +63,8 @@ router.post("/register", async (req, res) => {
       email: normalizedEmail,
       passwordHash,
       role: role,
-      company: company || null,
-      phone: phone || "",
+      company: normalizedCompany,
+      phone: (typeof phone === "string" && phone.trim()) ? phone.trim() : "",
       avatar: getAvatar(name),
       joinedDate: new Date().toISOString().split("T")[0],
     });

@@ -34,6 +34,14 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isDuplicate, setIsDuplicate] = useState(false);
 
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    // Clear stale company validation error when switching roles
+    if (error === "Company / Organization is required for Builder accounts.") {
+      setError("");
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name || !email || !password || !role) {
@@ -44,6 +52,13 @@ export default function RegisterPage() {
       setError("Password must be at least 6 characters.");
       return;
     }
+
+    // Role-specific company validation for Builder
+    if (role === "builder" && (!company || !company.trim())) {
+      setError("Company / Organization is required for Builder accounts.");
+      return;
+    }
+
     setError("");
     setIsDuplicate(false);
     setLoading(true);
@@ -54,8 +69,8 @@ export default function RegisterPage() {
         email,
         password,
         role,
-        company: company || null,
-        phone: phone || "",
+        company: company ? company.trim() : null,
+        phone: phone ? phone.trim() : "",
       });
 
       if (user.role === "builder") {
@@ -122,7 +137,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => setRole("builder")}
+              onClick={() => handleRoleChange("builder")}
               className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 role === "builder"
                   ? "bg-emerald-500/10 border-emerald-500 text-white shadow-lg shadow-emerald-500/10"
@@ -145,7 +160,7 @@ export default function RegisterPage() {
 
             <button
               type="button"
-              onClick={() => setRole("client")}
+              onClick={() => handleRoleChange("client")}
               className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
                 role === "client"
                   ? "bg-blue-500/10 border-blue-500 text-white shadow-lg shadow-blue-500/10"
@@ -224,13 +239,14 @@ export default function RegisterPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">
-                  {role === "client" ? "Company / Organization (Optional)" : "Company / Organization (Optional)"}
+                  {role === "builder" ? "Company / Organization *" : "Company / Organization (Optional)"}
                 </label>
                 <div className="relative">
                   <Building className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder={role === "client" ? "Optional for Clients" : "BuildSmart Infra"}
+                    required={role === "builder"}
+                    placeholder={role === "builder" ? "BuildSmart Infra *" : "Optional for Clients"}
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
