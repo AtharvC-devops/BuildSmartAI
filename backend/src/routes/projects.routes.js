@@ -19,9 +19,15 @@ function getOptionalUser(req) {
 // ── GET /api/projects ───────────────────────────────────────────────────
 router.get("/projects", (req, res) => {
   const user = getOptionalUser(req);
-  if (user && user.role === "client") {
-    const clientProjects = projects.filter((p) => p.clientId === user.id);
-    return res.json(clientProjects);
+  if (user) {
+    if (user.role === "client") {
+      const clientProjects = projects.filter((p) => p.clientId === user.id);
+      return res.json(clientProjects);
+    }
+    if (user.role === "builder") {
+      const builderProjects = projects.filter((p) => p.builderId === user.id || p.assignedAgentId);
+      return res.json(builderProjects);
+    }
   }
   res.json(projects);
 });
@@ -30,8 +36,12 @@ router.get("/projects", (req, res) => {
 router.get("/projects/stats", (req, res) => {
   const user = getOptionalUser(req);
   let filteredProjects = projects;
-  if (user && user.role === "client") {
-    filteredProjects = projects.filter((p) => p.clientId === user.id);
+  if (user) {
+    if (user.role === "client") {
+      filteredProjects = projects.filter((p) => p.clientId === user.id);
+    } else if (user.role === "builder") {
+      filteredProjects = projects.filter((p) => p.builderId === user.id || p.assignedAgentId);
+    }
   }
 
   const active = filteredProjects.filter((p) => p.status === "in_progress").length;
@@ -54,13 +64,16 @@ router.get("/projects/stats", (req, res) => {
 });
 
 // ── GET /api/projects/:id ───────────────────────────────────────────────
-router.get("/projects/:id", (req, res) => {
+router.get("/projects/:id", authenticateToken, (req, res) => {
   const project = projects.find((p) => p.id === parseInt(req.params.id));
   if (!project) return res.status(404).json({ error: "Project not found" });
 
-  const user = getOptionalUser(req);
-  if (user && user.role === "client" && project.clientId !== user.id) {
-    return res.status(403).json({ error: "Access denied. You can only view your own projects." });
+  // Resource Ownership Check
+  if (req.user.role === "client" && project.clientId !== req.user.id) {
+    return res.status(403).json({ error: "Access denied. You do not own this project." });
+  }
+  if (req.user.role === "builder" && project.builderId !== req.user.id && project.assignedAgentId !== req.user.id) {
+    return res.status(403).json({ error: "Access denied. You are not assigned to this project." });
   }
 
   res.json(project);
@@ -68,7 +81,6 @@ router.get("/projects/:id", (req, res) => {
 
 // ── POST /api/projects ──────────────────────────────────────────────────
 router.post("/projects", authenticateToken, (req, res) => {
-  // Can be posted by client (as project request) or builder
   const isClient = req.user.role === "client";
   const newProject = {
     id: projects.length + 1,
@@ -89,6 +101,11 @@ router.put("/projects/:id", authenticateToken, requireRole("builder"), (req, res
   const projectId = parseInt(req.params.id);
   const index = projects.findIndex((p) => p.id === projectId);
   if (index === -1) return res.status(404).json({ error: "Project not found" });
+
+  // Resource Ownership Check for Builder
+  if (projects[index].builderId !== req.user.id && projects[index].assignedAgentId !== req.user.id) {
+    return res.status(403).json({ error: "Access denied. You do not have permission to modify this project." });
+  }
 
   const updatedProject = {
     ...projects[index],
@@ -132,6 +149,14 @@ router.get("/projects/:id/milestones", (req, res) => {
 // ── PUT /api/projects/:id/milestones ─────────────────────────────────────
 router.put("/projects/:id/milestones", authenticateToken, requireRole("builder"), (req, res) => {
   const projectId = parseInt(req.params.id);
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  // Ownership Check
+  if (project.builderId !== req.user.id && project.assignedAgentId !== req.user.id) {
+    return res.status(403).json({ error: "Access denied. You do not have permission to update milestones for this project." });
+  }
+
   const { milestoneId, status, remarks, date } = req.body;
   const mIdx = milestones.findIndex(m => m.projectId === projectId && m.id === parseInt(milestoneId));
   if (mIdx === -1) return res.status(404).json({ error: "Milestone not found" });
@@ -169,6 +194,14 @@ router.get("/projects/:id/logs", (req, res) => {
 // ── POST /api/projects/:id/logs ──────────────────────────────────────────
 router.post("/projects/:id/logs", authenticateToken, requireRole("builder"), (req, res) => {
   const projectId = parseInt(req.params.id);
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  // Ownership Check
+  if (project.builderId !== req.user.id && project.assignedAgentId !== req.user.id) {
+    return res.status(403).json({ error: "Access denied. You do not have permission to post daily logs for this project." });
+  }
+
   const { date, workers, tasks, cementBags = 0, steelTons = 0, bricks = 0 } = req.body;
 
   const newLog = {
@@ -182,8 +215,6 @@ router.post("/projects/:id/logs", authenticateToken, requireRole("builder"), (re
     bricks: parseInt(bricks) || 0,
   };
 
-  // Auto-update project actual spent budget
-  // Cement: ₹420/bag, Steel: ₹65000/ton, Bricks: ₹8/brick, Labor: workers * ₹800/day
   const materialCost = newLog.cementBags * 420 + newLog.steelTons * 65000 + newLog.bricks * 8;
   const laborCost = newLog.workers * 800;
   const totalCost = materialCost + laborCost;

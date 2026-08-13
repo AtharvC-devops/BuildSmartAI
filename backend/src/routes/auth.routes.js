@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
-const { users } = require("../data/sampleData");
+const { users, addUser, findUserByEmail, UniqueConstraintError } = require("../data/sampleData");
 const { JWT_SECRET, authenticateToken } = require("../middleware/auth.middleware");
 
 // Helper to generate initials avatar
@@ -24,31 +24,38 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields: name, email, password, role." });
     }
 
-    const cleanRole = role.toLowerCase().trim();
-    if (cleanRole !== "builder" && cleanRole !== "client") {
-      return res.status(400).json({ error: "Role must be either 'builder' or 'client'." });
+    // Strict role validation - only exact "builder" or "client"
+    if (role !== "builder" && role !== "client") {
+      return res.status(400).json({ error: "Invalid role specified. Must be 'builder' or 'client'." });
     }
 
-    const existingUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Application data-layer uniqueness check before insert
+    const existingUser = findUserByEmail(normalizedEmail);
     if (existingUser) {
-      return res.status(409).json({ error: "User with this email already exists." });
+      const existingRole = existingUser.role === "builder" ? "builder" : "client";
+      const displayRole = existingRole === "builder" ? "Builder" : "Client";
+      return res.status(409).json({
+        error: `An account with this email already exists as a ${displayRole}. Please log in as ${displayRole} or use a different email address.`,
+        existingRole,
+        isDuplicate: true,
+      });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const newUser = {
-      id: users.length + 1,
+    // Call data layer addUser which enforces data-layer email index uniqueness
+    const newUser = addUser({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       passwordHash,
-      role: cleanRole,
-      company: company || (cleanRole === "builder" ? "Independent Builder" : null),
+      role: role,
+      company: company || null,
       phone: phone || "",
       avatar: getAvatar(name),
-      createdAt: new Date().toISOString(),
-    };
-
-    users.push(newUser);
+      joinedDate: new Date().toISOString().split("T")[0],
+    });
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role, name: newUser.name },
@@ -64,6 +71,15 @@ router.post("/register", async (req, res) => {
       user: userWithoutPassword,
     });
   } catch (err) {
+    if (err instanceof UniqueConstraintError || err.isDuplicate) {
+      const existingRole = err.existingUser?.role === "builder" ? "builder" : "client";
+      const displayRole = existingRole === "builder" ? "Builder" : "Client";
+      return res.status(409).json({
+        error: `An account with this email already exists as a ${displayRole}. Please log in as ${displayRole} or use a different email address.`,
+        existingRole,
+        isDuplicate: true,
+      });
+    }
     console.error("[AUTH ERROR] Registration failed:", err);
     res.status(500).json({ error: "Internal server error during registration." });
   }
@@ -72,13 +88,15 @@ router.post("/register", async (req, res) => {
 // ── POST /api/auth/login ────────────────────────────────────────────────
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, requestedRole } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required." });
     }
 
-    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = findUserByEmail(normalizedEmail);
+
     if (!user) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
@@ -86,6 +104,18 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid email or password." });
+    }
+
+    // Role anti-spoofing check if requestedRole is provided
+    if (requestedRole && typeof requestedRole === "string") {
+      const cleanReqRole = requestedRole.trim().toLowerCase();
+      if (cleanReqRole && cleanReqRole !== user.role) {
+        const displayRole = user.role === "builder" ? "Builder" : "Client";
+        return res.status(400).json({
+          error: `This email is registered as a ${displayRole}. Please log in using the ${displayRole} account.`,
+          actualRole: user.role,
+        });
+      }
     }
 
     const token = jwt.sign(

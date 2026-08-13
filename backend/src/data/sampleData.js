@@ -1,7 +1,17 @@
 // ══════════════════════════════════════════════════════════════════════════
-// BuildSmart AI — In-Memory Sample Data
+// BuildSmart AI — Data Access Layer & Store
 // Mirrors PostgreSQL schema: Users, Agents, Projects, Bookings, Reviews
+// Enforces Data-Layer Unique Email Index Constraints
 // ══════════════════════════════════════════════════════════════════════════
+
+class UniqueConstraintError extends Error {
+  constructor(message, existingUser) {
+    super(message);
+    this.name = "UniqueConstraintError";
+    this.existingUser = existingUser;
+    this.isDuplicate = true;
+  }
+}
 
 const users = [
   { id: 1, name: "Rajesh Kumar",  email: "rajesh@buildsmart.com", passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "builder",  company: "Kumar Constructions",  phone: "+91-9876543210", avatar: "RK", joinedDate: "2024-06-15" },
@@ -10,6 +20,45 @@ const users = [
   { id: 4, name: "Ananya Desai",  email: "ananya@gmail.com",      passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "client",   company: null,                   phone: "+91-9876543213", avatar: "AD", joinedDate: "2025-02-28" },
   { id: 5, name: "Suresh Reddy",  email: "suresh@gmail.com",      passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "client",   company: null,                   phone: "+91-9876543214", avatar: "SR", joinedDate: "2025-03-15" },
 ];
+
+// Data-Layer Unique Index for Normalized Emails
+const UniqueEmailIndex = new Map();
+
+// Populate initial index
+users.forEach((u) => {
+  UniqueEmailIndex.set(u.email.trim().toLowerCase(), u);
+});
+
+function findUserByEmail(email) {
+  if (!email) return null;
+  const normalized = email.trim().toLowerCase();
+  return UniqueEmailIndex.get(normalized) || null;
+}
+
+function addUser(userData) {
+  if (!userData || !userData.email) {
+    throw new Error("User object must contain an email address.");
+  }
+  const normalizedEmail = userData.email.trim().toLowerCase();
+  
+  if (UniqueEmailIndex.has(normalizedEmail)) {
+    const existing = UniqueEmailIndex.get(normalizedEmail);
+    throw new UniqueConstraintError(
+      `An account with this email already exists as a ${existing.role === "builder" ? "Builder" : "Client"}.`,
+      existing
+    );
+  }
+
+  const newUser = {
+    id: users.length + 1,
+    ...userData,
+    email: normalizedEmail,
+  };
+
+  users.push(newUser);
+  UniqueEmailIndex.set(normalizedEmail, newUser);
+  return newUser;
+}
 
 const agents = [
   { id: 1, name: "Amit Patel",      skill: "Structural",  rating: 4.8, availability: true,  distance: 12, workload: 3,  hourlyRate: 850,  completedProjects: 47, experience: 12, avatar: "AP" },
@@ -56,7 +105,6 @@ const services = [
   { id: 6, name: "Industrial Construction",  description: "Warehouses, factories, and industrial facilities",                 minBudget: 3000000,  maxBudget: 30000000, duration: "6-12 months", icon: "🏭", category: "construction" },
 ];
 
-// Monthly spending data for dashboard charts
 const monthlyData = [
   { month: "Jul",  budget: 1200000,  actual: 1150000  },
   { month: "Aug",  budget: 1400000,  actual: 1380000  },
@@ -88,47 +136,36 @@ const suppliers = [
 ];
 
 const milestones = [
-  // Sunrise Villa (Priya Sharma, Rajesh Kumar)
   { id: 1, projectId: 1, name: "Site Planning & Permitting", status: "completed", date: "2026-01-20", remarks: "All approvals in place." },
   { id: 2, projectId: 1, name: "Excavation & Foundation", status: "completed", date: "2026-03-10", remarks: "Foundation concrete poured." },
   { id: 3, projectId: 1, name: "Framing & Structure", status: "in_progress", date: "2026-05-12", remarks: "Pillar casting active." },
   { id: 4, projectId: 1, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
   { id: 5, projectId: 1, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
   { id: 6, projectId: 1, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
-
-  // Tech Park Phase 2 (Ananya Desai, Rajesh Kumar)
   { id: 7, projectId: 2, name: "Site Planning & Permitting", status: "completed", date: "2025-09-10", remarks: "NOC secured." },
   { id: 8, projectId: 2, name: "Excavation & Foundation", status: "completed", date: "2025-11-20", remarks: "Dual cell basement completed." },
   { id: 9, projectId: 2, name: "Framing & Structure", status: "completed", date: "2026-02-28", remarks: "All 4 floors casted." },
   { id: 10, projectId: 2, name: "Plumbing, Wiring & Plastering", status: "in_progress", date: "2026-05-01", remarks: "Electrical trunking underway." },
   { id: 11, projectId: 2, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
   { id: 12, projectId: 2, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
-
-  // Green Meadows Apartment (Suresh Reddy, Vikram Singh)
   { id: 13, projectId: 3, name: "Site Planning & Permitting", status: "in_progress", date: "2026-04-10", remarks: "Zoning approval pending." },
   { id: 14, projectId: 3, name: "Excavation & Foundation", status: "not_started", date: null, remarks: "" },
   { id: 15, projectId: 3, name: "Framing & Structure", status: "not_started", date: null, remarks: "" },
   { id: 16, projectId: 3, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
   { id: 17, projectId: 3, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
   { id: 18, projectId: 3, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
-
-  // City Mall Renovation (Ananya Desai, Rajesh Kumar)
   { id: 19, projectId: 4, name: "Site Planning & Permitting", status: "completed", date: "2025-06-15", remarks: "Structural audit complete." },
   { id: 20, projectId: 4, name: "Excavation & Foundation", status: "completed", date: "2025-08-01", remarks: "Footings reinforced." },
   { id: 21, projectId: 4, name: "Framing & Structure", status: "completed", date: "2025-09-30", remarks: "Shell completed." },
   { id: 22, projectId: 4, name: "Plumbing, Wiring & Plastering", status: "completed", date: "2025-11-15", remarks: "Fittings completed." },
   { id: 23, projectId: 4, name: "Interior Finishing & Paint", status: "completed", date: "2025-12-10", remarks: "Cladding and paint finished." },
   { id: 24, projectId: 4, name: "Final Walkthrough & Handover", status: "completed", date: "2025-12-20", remarks: "Project handed over to owners." },
-
-  // Lakeside Bungalow (Priya Sharma, Vikram Singh)
   { id: 25, projectId: 5, name: "Site Planning & Permitting", status: "completed", date: "2026-02-20", remarks: "Sanctions active." },
   { id: 26, projectId: 5, name: "Excavation & Foundation", status: "in_progress", date: "2026-03-05", remarks: "Excavation paused." },
   { id: 27, projectId: 5, name: "Framing & Structure", status: "not_started", date: null, remarks: "" },
   { id: 28, projectId: 5, name: "Plumbing, Wiring & Plastering", status: "not_started", date: null, remarks: "" },
   { id: 29, projectId: 5, name: "Interior Finishing & Paint", status: "not_started", date: null, remarks: "" },
   { id: 30, projectId: 5, name: "Final Walkthrough & Handover", status: "not_started", date: null, remarks: "" },
-
-  // Warehouse Complex (Suresh Reddy, Rajesh Kumar)
   { id: 31, projectId: 6, name: "Site Planning & Permitting", status: "completed", date: "2025-11-10", remarks: "Warehouse design approved." },
   { id: 32, projectId: 6, name: "Excavation & Foundation", status: "completed", date: "2026-01-15", remarks: "Heavy columns footings completed." },
   { id: 33, projectId: 6, name: "Framing & Structure", status: "in_progress", date: "2026-03-20", remarks: "Gantry girders installation." },
@@ -143,4 +180,18 @@ const dailyLogs = [
   { id: 3, projectId: 2, date: "2026-05-09", workers: 22, tasks: "Electrical conduit wiring on 3rd floor", cementBags: 0, steelTons: 0.0, bricks: 0 },
 ];
 
-module.exports = { users, agents, projects, bookings, reviews, services, monthlyData, suppliers, milestones, dailyLogs };
+module.exports = {
+  users,
+  addUser,
+  findUserByEmail,
+  UniqueConstraintError,
+  agents,
+  projects,
+  bookings,
+  reviews,
+  services,
+  monthlyData,
+  suppliers,
+  milestones,
+  dailyLogs,
+};

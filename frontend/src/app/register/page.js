@@ -32,6 +32,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isDuplicate, setIsDuplicate] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,6 +45,7 @@ export default function RegisterPage() {
       return;
     }
     setError("");
+    setIsDuplicate(false);
     setLoading(true);
 
     try {
@@ -52,8 +54,8 @@ export default function RegisterPage() {
         email,
         password,
         role,
-        company,
-        phone,
+        company: company || null,
+        phone: phone || "",
       });
 
       if (user.role === "builder") {
@@ -64,7 +66,11 @@ export default function RegisterPage() {
         router.replace("/");
       }
     } catch (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      const errMsg = err.message || "Registration failed. Please try again.";
+      setError(errMsg);
+      if (errMsg.includes("already exists")) {
+        setIsDuplicate(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -165,10 +171,22 @@ export default function RegisterPage() {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs flex items-center gap-2"
+              className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-300 text-xs space-y-2"
             >
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                <span className="leading-relaxed">{error}</span>
+              </div>
+              {isDuplicate && (
+                <div className="pt-2 border-t border-red-500/20 flex gap-2">
+                  <Link
+                    href="/login"
+                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    Go to Login <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -205,12 +223,14 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Company / Organization</label>
+                <label className="text-xs font-semibold text-slate-300">
+                  {role === "client" ? "Company / Organization (Optional)" : "Company / Organization (Optional)"}
+                </label>
                 <div className="relative">
                   <Building className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="BuildSmart Infra"
+                    placeholder={role === "client" ? "Optional for Clients" : "BuildSmart Infra"}
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -219,7 +239,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Phone Number</label>
+                <label className="text-xs font-semibold text-slate-300">Phone Number (Optional)</label>
                 <div className="relative">
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
