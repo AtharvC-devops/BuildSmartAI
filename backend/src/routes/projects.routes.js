@@ -1,30 +1,55 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const router = express.Router();
 const { projects, bookings, monthlyData, milestones, dailyLogs } = require("../data/sampleData");
+const { JWT_SECRET, authenticateToken, requireRole } = require("../middleware/auth.middleware");
+
+// Optional user extractor helper
+function getOptionalUser(req) {
+  try {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+    if (!token) return null;
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) {
+    return null;
+  }
+}
 
 // ── GET /api/projects ───────────────────────────────────────────────────
-router.get("/projects", (_req, res) => {
+router.get("/projects", (req, res) => {
+  const user = getOptionalUser(req);
+  if (user && user.role === "client") {
+    const clientProjects = projects.filter((p) => p.clientId === user.id);
+    return res.json(clientProjects);
+  }
   res.json(projects);
 });
 
 // ── GET /api/projects/stats ─────────────────────────────────────────────
-router.get("/projects/stats", (_req, res) => {
-  const active = projects.filter((p) => p.status === "in_progress").length;
-  const totalBudget = projects.reduce((s, p) => s + p.budget, 0);
-  const totalSpent = projects.reduce((s, p) => s + p.spent, 0);
-  const delayed = projects.filter((p) => p.status === "on_hold").length;
-  const completed = projects.filter((p) => p.status === "completed").length;
-  const planning = projects.filter((p) => p.status === "planning").length;
+router.get("/projects/stats", (req, res) => {
+  const user = getOptionalUser(req);
+  let filteredProjects = projects;
+  if (user && user.role === "client") {
+    filteredProjects = projects.filter((p) => p.clientId === user.id);
+  }
+
+  const active = filteredProjects.filter((p) => p.status === "in_progress").length;
+  const totalBudget = filteredProjects.reduce((s, p) => s + p.budget, 0);
+  const totalSpent = filteredProjects.reduce((s, p) => s + p.spent, 0);
+  const delayed = filteredProjects.filter((p) => p.status === "on_hold").length;
+  const completed = filteredProjects.filter((p) => p.status === "completed").length;
+  const planning = filteredProjects.filter((p) => p.status === "planning").length;
 
   res.json({
     activeProjects: active,
     totalBudget,
     totalSpent,
-    budgetUsage: Math.round((totalSpent / totalBudget) * 100),
+    budgetUsage: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
     delayedProjects: delayed,
     completedProjects: completed,
     planningProjects: planning,
-    totalProjects: projects.length,
+    totalProjects: filteredProjects.length,
   });
 });
 
@@ -32,15 +57,26 @@ router.get("/projects/stats", (_req, res) => {
 router.get("/projects/:id", (req, res) => {
   const project = projects.find((p) => p.id === parseInt(req.params.id));
   if (!project) return res.status(404).json({ error: "Project not found" });
+
+  const user = getOptionalUser(req);
+  if (user && user.role === "client" && project.clientId !== user.id) {
+    return res.status(403).json({ error: "Access denied. You can only view your own projects." });
+  }
+
   res.json(project);
 });
 
 // ── POST /api/projects ──────────────────────────────────────────────────
-router.post("/projects", (req, res) => {
+router.post("/projects", authenticateToken, (req, res) => {
+  // Can be posted by client (as project request) or builder
+  const isClient = req.user.role === "client";
   const newProject = {
     id: projects.length + 1,
     ...req.body,
-    status: "planning",
+    clientId: isClient ? req.user.id : (req.body.clientId || 2),
+    clientName: isClient ? req.user.name : (req.body.clientName || "Client"),
+    builderId: isClient ? 1 : req.user.id,
+    status: req.body.status || "planning",
     spent: 0,
     progress: 0,
   };
@@ -49,7 +85,7 @@ router.post("/projects", (req, res) => {
 });
 
 // ── PUT /api/projects/:id ───────────────────────────────────────────────
-router.put("/projects/:id", (req, res) => {
+router.put("/projects/:id", authenticateToken, requireRole("builder"), (req, res) => {
   const projectId = parseInt(req.params.id);
   const index = projects.findIndex((p) => p.id === projectId);
   if (index === -1) return res.status(404).json({ error: "Project not found" });
@@ -94,7 +130,7 @@ router.get("/projects/:id/milestones", (req, res) => {
 });
 
 // ── PUT /api/projects/:id/milestones ─────────────────────────────────────
-router.put("/projects/:id/milestones", (req, res) => {
+router.put("/projects/:id/milestones", authenticateToken, requireRole("builder"), (req, res) => {
   const projectId = parseInt(req.params.id);
   const { milestoneId, status, remarks, date } = req.body;
   const mIdx = milestones.findIndex(m => m.projectId === projectId && m.id === parseInt(milestoneId));
@@ -131,10 +167,10 @@ router.get("/projects/:id/logs", (req, res) => {
 });
 
 // ── POST /api/projects/:id/logs ──────────────────────────────────────────
-router.post("/projects/:id/logs", (req, res) => {
+router.post("/projects/:id/logs", authenticateToken, requireRole("builder"), (req, res) => {
   const projectId = parseInt(req.params.id);
   const { date, workers, tasks, cementBags = 0, steelTons = 0, bricks = 0 } = req.body;
-  
+
   const newLog = {
     id: dailyLogs.length + 1,
     projectId,

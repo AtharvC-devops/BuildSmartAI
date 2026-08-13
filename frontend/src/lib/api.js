@@ -2,13 +2,35 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 // ── Helper ──────────────────────────────────────────────────────────────
 async function request(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...options.headers };
+
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("buildsmart_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
-  if (!res.ok) throw new Error(`API Error: ${res.status}`);
-  return res.json();
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `API Error: ${res.status}`);
+  }
+  return data;
 }
+
+// ── Auth Endpoints ──────────────────────────────────────────────────────
+export const loginUser = (credentials) =>
+  request("/auth/login", { method: "POST", body: JSON.stringify(credentials) });
+
+export const registerUser = (userData) =>
+  request("/auth/register", { method: "POST", body: JSON.stringify(userData) });
+
+export const getMe = () => request("/auth/me");
 
 // ── AI Endpoints ────────────────────────────────────────────────────────
 export const predictCost = (data) =>

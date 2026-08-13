@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -13,6 +14,10 @@ import {
   Shield,
   TrendingUp,
   CheckCircle2,
+  LogOut,
+  User,
+  HardHat,
+  UserCheck,
 } from "lucide-react";
 
 const features = [
@@ -60,9 +65,13 @@ const fadeIn = {
 
 export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+
   useEffect(() => setMounted(true), []);
 
   if (!mounted) return null;
+
+  const dashboardRoute = user?.role === "builder" ? "/builder" : user?.role === "client" ? "/client" : "/login";
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white overflow-x-hidden">
@@ -75,15 +84,43 @@ export default function LandingPage() {
             </div>
             BuildSmart AI
           </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-slate-400">
-            <a href="#features" className="hover:text-white transition-colors">Features</a>
-            <a href="#stats" className="hover:text-white transition-colors">Stats</a>
-            <Link href="/dashboard" className="px-4 py-2 rounded-lg gradient-primary text-white text-sm font-medium hover:opacity-90 transition-opacity">
-              Builder Dashboard
-            </Link>
-            <Link href="/customer" className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 text-sm font-medium hover:bg-white/5 transition-all">
-              Customer Portal
-            </Link>
+          <div className="flex items-center gap-6 text-sm text-slate-400">
+            <a href="#features" className="hidden md:block hover:text-white transition-colors">Features</a>
+            <a href="#stats" className="hidden md:block hover:text-white transition-colors">Stats</a>
+
+            {isAuthenticated ? (
+              <div className="flex items-center gap-3">
+                <Link
+                  href={dashboardRoute}
+                  className="px-4 py-2 rounded-lg gradient-primary text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                >
+                  {user.role === "builder" ? <HardHat className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                  {user.role === "builder" ? "Builder Dashboard" : "Client Dashboard"}
+                </Link>
+                <button
+                  onClick={logout}
+                  title="Log Out"
+                  className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/5 transition-colors"
+                >
+                  <LogOut className="w-4.5 h-4.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/login"
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-sm font-medium hover:bg-white/5 transition-all"
+                >
+                  Log In
+                </Link>
+                <Link
+                  href="/register"
+                  className="px-4 py-2 rounded-lg gradient-primary text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -97,7 +134,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto text-center relative z-10">
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-6">
-              <Zap className="w-4 h-4" /> AI-Powered Construction Platform
+              <Zap className="w-4 h-4" /> AI-Powered Role-Based Construction Platform
             </div>
             <h1 className="text-5xl md:text-7xl font-black leading-tight tracking-tight mb-6">
               Build Smarter
@@ -105,8 +142,7 @@ export default function LandingPage() {
               <span className="gradient-text">with Artificial Intelligence</span>
             </h1>
             <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Predict costs, estimate timelines, and allocate resources intelligently.
-              The construction management platform that thinks ahead.
+              Predict costs, estimate timelines, and allocate resources intelligently with a clean separation between Builder and Client workspaces.
             </p>
           </motion.div>
 
@@ -116,18 +152,29 @@ export default function LandingPage() {
             transition={{ delay: 0.3, duration: 0.6 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <Link
-              href="/dashboard"
-              className="px-8 py-3.5 rounded-xl gradient-primary text-white font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/20"
-            >
-              Open Builder Dashboard <ArrowRight className="w-5 h-5" />
-            </Link>
-            <Link
-              href="/customer"
-              className="px-8 py-3.5 rounded-xl bg-white/5 border border-white/10 text-white font-semibold hover:bg-white/10 transition-all"
-            >
-              Customer Portal
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href={dashboardRoute}
+                className="px-8 py-3.5 rounded-xl gradient-primary text-white font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/20"
+              >
+                Go to {user?.role === "builder" ? "Builder Dashboard" : "Client Dashboard"} <ArrowRight className="w-5 h-5" />
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/register?role=builder"
+                  className="px-8 py-3.5 rounded-xl gradient-primary text-white font-semibold flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-emerald-500/20"
+                >
+                  <HardHat className="w-5 h-5" /> Continue as Builder <ArrowRight className="w-5 h-5" />
+                </Link>
+                <Link
+                  href="/register?role=client"
+                  className="px-8 py-3.5 rounded-xl bg-white/5 border border-white/10 text-white font-semibold hover:bg-white/10 transition-all flex items-center gap-2"
+                >
+                  <UserCheck className="w-5 h-5" /> Continue as Client
+                </Link>
+              </>
+            )}
           </motion.div>
         </div>
       </section>
@@ -199,9 +246,9 @@ export default function LandingPage() {
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { step: "01", title: "Input Project Details", desc: "Enter area, material quality, location, and other parameters." },
-              { step: "02", title: "AI Processes Data", desc: "Our ML models analyze your inputs against thousands of data points." },
-              { step: "03", title: "Get Smart Insights", desc: "Receive accurate predictions for cost, timeline, and optimal resources." },
+              { step: "01", title: "Authenticate Account", desc: "Log in or register as a Builder or Client with secure role-based access." },
+              { step: "02", title: "Access Role Dashboard", desc: "Builders manage projects, logs, and milestones; Clients track project progress & AI estimates." },
+              { step: "03", title: "Get Smart Insights", desc: "Receive accurate predictions for cost, timeline, and optimal resource allocations." },
             ].map((item, i) => (
               <motion.div
                 key={item.step}
@@ -236,20 +283,20 @@ export default function LandingPage() {
             <div className="relative z-10">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Build Smarter?</h2>
               <p className="text-emerald-100 mb-8 max-w-md mx-auto">
-                Join hundreds of builders already using AI to optimize their construction projects.
+                Join builders and clients optimizing construction management with AI.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
-                  href="/dashboard"
+                  href="/login"
                   className="px-8 py-3.5 rounded-xl bg-white text-emerald-700 font-bold hover:bg-emerald-50 transition-colors flex items-center gap-2"
                 >
-                  Start Building <ArrowRight className="w-5 h-5" />
+                  Log In to Platform <ArrowRight className="w-5 h-5" />
                 </Link>
                 <Link
-                  href="/customer"
+                  href="/register"
                   className="px-8 py-3.5 rounded-xl border-2 border-white/30 text-white font-semibold hover:bg-white/10 transition-all"
                 >
-                  Customer Access
+                  Create New Account
                 </Link>
               </div>
             </div>
@@ -263,7 +310,7 @@ export default function LandingPage() {
           <Building2 className="w-4 h-4" />
           <span className="font-semibold text-slate-400">BuildSmart AI</span>
         </div>
-        © 2026 BuildSmart AI. Built with intelligence.
+        © 2026 BuildSmart AI. Role-Based Authentication System.
       </footer>
     </div>
   );

@@ -4,11 +4,11 @@
 // ══════════════════════════════════════════════════════════════════════════
 
 const users = [
-  { id: 1, name: "Rajesh Kumar",  email: "rajesh@buildsmart.com", role: "builder",  company: "Kumar Constructions",  phone: "+91-9876543210", avatar: "RK", joinedDate: "2024-06-15" },
-  { id: 2, name: "Priya Sharma",  email: "priya@gmail.com",       role: "customer", company: null,                   phone: "+91-9876543211", avatar: "PS", joinedDate: "2025-01-20" },
-  { id: 3, name: "Vikram Singh",  email: "vikram@buildtech.in",   role: "builder",  company: "BuildTech Solutions",  phone: "+91-9876543212", avatar: "VS", joinedDate: "2024-03-10" },
-  { id: 4, name: "Ananya Desai",  email: "ananya@gmail.com",      role: "customer", company: null,                   phone: "+91-9876543213", avatar: "AD", joinedDate: "2025-02-28" },
-  { id: 5, name: "Suresh Reddy",  email: "suresh@gmail.com",      role: "customer", company: null,                   phone: "+91-9876543214", avatar: "SR", joinedDate: "2025-03-15" },
+  { id: 1, name: "Rajesh Kumar",  email: "rajesh@buildsmart.com", passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "builder",  company: "Kumar Constructions",  phone: "+91-9876543210", avatar: "RK", joinedDate: "2024-06-15" },
+  { id: 2, name: "Priya Sharma",  email: "priya@gmail.com",       passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "client",   company: null,                   phone: "+91-9876543211", avatar: "PS", joinedDate: "2025-01-20" },
+  { id: 3, name: "Vikram Singh",  email: "vikram@buildtech.in",   passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "builder",  company: "BuildTech Solutions",  phone: "+91-9876543212", avatar: "VS", joinedDate: "2024-03-10" },
+  { id: 4, name: "Ananya Desai",  email: "ananya@gmail.com",      passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "client",   company: null,                   phone: "+91-9876543213", avatar: "AD", joinedDate: "2025-02-28" },
+  { id: 5, name: "Suresh Reddy",  email: "suresh@gmail.com",      passwordHash: "$2b$10$Y8BXJGiEXpJ/MrZBfDybGOxBj9VwnuS8NDigrsdhzd9bMOwqaysBG", role: "client",   company: null,                   phone: "+91-9876543214", avatar: "SR", joinedDate: "2025-03-15" },
 ];
 
 const agents = [
