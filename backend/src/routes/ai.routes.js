@@ -284,4 +284,26 @@ router.post("/qa-chat", async (req, res) => {
   }
 });
 
+// ── POST /api/predict-price (Real ML Model) ─────────────────────────────
+router.post("/predict-price", async (req, res) => {
+  try {
+    const { data } = await axios.post(`${AI_SERVICE_URL}/predict-price`, req.body);
+    res.json(data);
+  } catch (err) {
+    console.error(`[ERROR] AI predict-price failed:`, err.message);
+    res.status(500).json({ error: "AI service unavailable. Ensure model is trained." });
+  }
+});
+
+// ── GET /api/locations (Model Location List) ────────────────────────────
+router.get("/locations", async (req, res) => {
+  try {
+    const { data } = await axios.get(`${AI_SERVICE_URL}/locations`);
+    res.json(data);
+  } catch (err) {
+    console.warn("[WARN] AI service unavailable for locations");
+    res.json({ locations: [], count: 0, fallback: true });
+  }
+});
+
 module.exports = router;

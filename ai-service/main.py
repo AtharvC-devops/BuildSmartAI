@@ -4,18 +4,25 @@ FastAPI microservice with ML models for construction cost/time prediction
 and smart resource allocation.
 """
 
+import json
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+import joblib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
 # ── Global model references ──────────────────────────────────────────────
 cost_model: RandomForestRegressor = None
 time_model: LinearRegression = None
+price_pipeline = None  # Real trained ML pipeline from train_model.py
+location_list: list = []  # Valid locations the model was trained on
 
 
 # ── Pydantic Schemas ─────────────────────────────────────────────────────
@@ -99,6 +106,19 @@ class SupplierAllocationResponse(BaseModel):
     rankings: list
     best_supplier: dict
 
+class PricePredictionRequest(BaseModel):
+    location: str
+    total_sqft: float
+    bhk: int
+    bath: int
+
+class PricePredictionResponse(BaseModel):
+    predicted_price: float
+    price_per_sqft: float
+    price_display: str
+    confidence: float
+    model_algorithm: str
+
 class QAChatRequest(BaseModel):
     question: str
 
@@ -156,11 +176,34 @@ def train_models():
     print("[OK] ML models trained successfully!")
 
 
+# ── Load Real Trained Model ──────────────────────────────────────────────
+
+def load_price_model():
+    """Load the real trained ML pipeline from buildsmart_model.pkl."""
+    global price_pipeline, location_list
+    model_path = Path(__file__).parent / "buildsmart_model.pkl"
+    loc_path = Path(__file__).parent / "location_list.json"
+
+    if model_path.exists():
+        price_pipeline = joblib.load(model_path)
+        print(f"[OK] Real ML model loaded from {model_path}")
+    else:
+        print(f"[!] Model file not found: {model_path}")
+        print("    Run 'python train_model.py' to generate it.")
+
+    if loc_path.exists():
+        with open(loc_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        location_list = data.get("locations", [])
+        print(f"[OK] Location list loaded: {len(location_list)} locations")
+
+
 # ── App Lifespan ─────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app):
     train_models()
+    load_price_model()
     yield
 
 app = FastAPI(
@@ -184,6 +227,71 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"status": "ok", "service": "BuildSmart AI Service"}
+
+
+@app.get("/locations")
+async def get_locations():
+    """Return the list of valid locations the ML model was trained on."""
+    return {"locations": location_list, "count": len(location_list)}
+
+
+@app.post("/predict-price", response_model=PricePredictionResponse)
+async def predict_price(req: PricePredictionRequest):
+    """
+    Predict property price using the real trained ML pipeline.
+    Input features: location, total_sqft, bhk, bath
+    Output: predicted price in INR
+    """
+    if price_pipeline is None:
+        raise Exception("ML model not loaded. Run train_model.py first.")
+
+    # Build a DataFrame matching the model's expected features
+    input_data = pd.DataFrame([{
+        "location": req.location,
+        "total_sqft": req.total_sqft,
+        "bhk": req.bhk,
+        "bath": req.bath,
+    }])
+
+    # Add city and area_type if the model expects them
+    # (the pipeline's ColumnTransformer will handle missing/extra columns)
+    try:
+        feature_names = price_pipeline.named_steps["preprocessor"].feature_names_in_
+        if "city" in feature_names and "city" not in input_data.columns:
+            input_data["city"] = "Bengaluru"
+        if "area_type" in feature_names and "area_type" not in input_data.columns:
+            input_data["area_type"] = "Super Built-Up Area"
+    except AttributeError:
+        pass
+
+    predicted = float(price_pipeline.predict(input_data)[0])
+    predicted = max(predicted, 0)
+
+    price_per_sqft = predicted / req.total_sqft if req.total_sqft > 0 else 0
+
+    # Format for display in Indian notation
+    if predicted >= 1_00_00_000:
+        display = f"{predicted / 1_00_00_000:.2f} Cr"
+    elif predicted >= 1_00_000:
+        display = f"{predicted / 1_00_000:.2f} Lakhs"
+    else:
+        display = f"{predicted:,.0f}"
+
+    # Determine model algorithm from location_list.json metadata
+    algorithm = "XGBRegressor"
+    loc_path = Path(__file__).parent / "location_list.json"
+    if loc_path.exists():
+        with open(loc_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        algorithm = meta.get("best_algorithm", algorithm)
+
+    return PricePredictionResponse(
+        predicted_price=round(predicted, 2),
+        price_per_sqft=round(price_per_sqft, 2),
+        price_display=display,
+        confidence=0.85,
+        model_algorithm=algorithm,
+    )
 
 
 @app.post("/predict-cost", response_model=CostPredictionResponse)

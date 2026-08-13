@@ -60,3 +60,9 @@ export const createProjectLog = (projectId, logData) =>
 
 export const askChatAssistant = (question) =>
   request("/qa-chat", { method: "POST", body: JSON.stringify({ question }) });
+
+// ── Real ML Model Endpoints ─────────────────────────────────────────────
+export const predictPrice = (data) =>
+  request("/predict-price", { method: "POST", body: JSON.stringify(data) });
+
+export const getLocations = () => request("/locations");
