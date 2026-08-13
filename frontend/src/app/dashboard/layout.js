@@ -15,6 +15,10 @@ import {
   ChevronRight,
   LogOut,
   User,
+  Hammer,
+  ShieldAlert,
+  FileText,
+  Flag,
 } from "lucide-react";
 
 const builderLinks = [
@@ -22,6 +26,10 @@ const builderLinks = [
   { href: "/dashboard/cost-prediction",     label: "Cost Prediction",      icon: DollarSign },
   { href: "/dashboard/time-prediction",     label: "Time Prediction",      icon: Clock },
   { href: "/dashboard/resource-allocation", label: "Resource Allocation",  icon: Users },
+  { href: "/dashboard/material-sourcing",   label: "Material Sourcing",    icon: Hammer },
+  { href: "/dashboard/risk-advisor",        label: "Risk Advisor",         icon: ShieldAlert },
+  { href: "/dashboard/daily-logs",          label: "Daily Logs",           icon: FileText },
+  { href: "/dashboard/project-milestones",  label: "Project Milestones",   icon: Flag },
 ];
 
 const customerLinks = [
