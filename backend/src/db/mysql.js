@@ -37,7 +37,7 @@ async function initDatabase() {
     console.log(`[MYSQL] Connected to '${config.database}' at ${config.host}:${config.port}`);
     return pool;
   } catch (error) {
-    if (pool) await pool.end().catch(() => {});
+    if (pool) await pool.end().catch(() => { });
     pool = null;
     console.error(`[MYSQL] ${error.code || "CONNECTION_ERROR"}: database unavailable`);
     throw unavailableError(error);
@@ -84,7 +84,7 @@ async function withTransaction(work) {
     await connection.commit();
     return result;
   } catch (error) {
-    await connection.rollback().catch(() => {});
+    await connection.rollback().catch(() => { });
     throw error;
   } finally {
     connection.release();

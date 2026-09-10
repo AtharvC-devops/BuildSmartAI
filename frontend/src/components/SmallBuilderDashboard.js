@@ -68,6 +68,9 @@ export default function SmallBuilderDashboard() {
   const recentLogs = [...logs].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 3);
   const alerts = data?.dashboard?.alerts || [];
 
+  const billSummary = data?.bills?.summary || {};
+  const pendingBills = Number(billSummary.submitted || 0) + Number(billSummary.underReview || 0);
+
   if (loading && !data && !projects.length) {
     return <div className="flex min-h-[280px] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-emerald-600" /></div>;
   }
@@ -123,11 +126,37 @@ export default function SmallBuilderDashboard() {
         </section>
       </div>
 
+      <div className="grid gap-5">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-bold text-slate-800"><Receipt className="h-4 w-4 text-emerald-600" /> Contractor RA Billing</h3>
+            <Link href="/dashboard/ra-billing" className="text-xs font-bold text-emerald-700 hover:text-emerald-800">
+              Manage RA Bills →
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MiniStat label="Total RA Bills" value={billSummary.totalBills || 0} />
+            <MiniStat label="Approved" value={billSummary.approved || 0} />
+            <MiniStat label="Pending" value={pendingBills} />
+            <MiniStat label="Outstanding" value={formatINR(billSummary.outstandingAmount)} />
+          </div>
+        </section>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-bold text-slate-800">Recent daily logs</h3>{recentLogs.length ? <div className="mt-3 divide-y divide-slate-100">{recentLogs.map(log => <div key={log.id} className="py-3 text-sm"><div className="flex justify-between gap-3"><strong className="text-slate-700">{log.date}</strong><span className="text-xs text-slate-500">{log.workers || log.workersPresent || 0} workers</span></div><p className="mt-1 line-clamp-2 text-xs text-slate-500">{log.tasks || log.workCompleted || "Work update recorded"}</p></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No daily logs yet.</p>}</section>
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-bold text-slate-800">Material watch</h3>{Array.isArray(materials) && materials.length ? <div className="mt-3 grid grid-cols-2 gap-2">{materials.slice(0, 6).map(material => <div key={material.id || material.material} className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-700">{material.material || material.materialName}</p><p className="mt-1 text-sm text-slate-900">{formatINR(material.rate || material.currentRate || material.unit_price)}</p></div>)}</div> : <p className="mt-3 text-sm text-slate-500">Add material rates to see price changes.</p>}</section>
       </div>
       {error && <p className="text-center text-sm text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-black text-slate-800">{value}</p>
     </div>
   );
 }

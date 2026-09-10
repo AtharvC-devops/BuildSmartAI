@@ -1,27 +1,25 @@
-const SCALE_FEATURES = [
+const CORE_FEATURES = [
   "dashboard",
   "projects",
-  "boq",
-  "cost_tracking",
-  "contractors",
-  "ra_billing",
-  "ra_bill_pdf",
-  "labour",
-  "material_rates",
-  "material_procurement",
   "daily_logs",
-  "milestones",
-  "risk_checklist",
-  "compliance",
-  "rera_compliance",
-  "gst_billing",
-  "notifications",
-  "audit_history",
-  "regional_languages",
-  // Legacy UI keys retained as aliases during the migration.
-  "worker_allocation",
+  "boq",
+  "ra_billing"
+];
+
+const MID_FEATURES = [
+  ...CORE_FEATURES,
   "material_sourcing",
+  "worker_allocation",
+  "contractors",
+  "cost_tracking"
+];
+
+const LARGE_FEATURES = [
+  ...MID_FEATURES,
   "risk_advisory",
+  "ai_cost_prediction",
+  "time_prediction",
+  "advanced_worker_allocation",
   "enterprise_compliance"
 ];
 
@@ -29,19 +27,19 @@ const SCALE_CONFIG = {
   SMALL: {
     label: "Small Contractor / Individual Builder",
     maxProjects: 2,
-    enabledFeatures: SCALE_FEATURES,
+    enabledFeatures: CORE_FEATURES,
     advancedFeatures: []
   },
   MID: {
     label: "Mid-size Regional Developer",
     maxProjects: 10,
-    enabledFeatures: SCALE_FEATURES,
+    enabledFeatures: MID_FEATURES,
     advancedFeatures: ["portfolio_dashboard", "bulk_procurement"]
   },
   LARGE: {
     label: "Large Branded Developer",
     maxProjects: null,
-    enabledFeatures: SCALE_FEATURES,
+    enabledFeatures: LARGE_FEATURES,
     advancedFeatures: ["portfolio_dashboard", "bulk_procurement", "multi_entity_controls"]
   }
 };

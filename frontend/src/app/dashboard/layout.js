@@ -30,13 +30,13 @@ const builderLinks = [
   { href: "/dashboard/cost-estimator",      label: "BOQ Estimator",        icon: DollarSign,      featureKey: "boq" },
   { href: "/dashboard/daily-logs",          label: "Daily Site Logs",      icon: FileText,        featureKey: "daily_logs" },
   { href: "/dashboard/project-milestones",  label: "Project Milestones",   icon: Flag,            featureKey: "projects" },
-  { href: "/dashboard/material-sourcing",   label: "Material Rates",       icon: Hammer,          featureKey: "material_sourcing" },
   { href: "/dashboard/ra-billing",          label: "RA Billing",           icon: Receipt,         featureKey: "ra_billing" },
+  { href: "/dashboard/material-sourcing",   label: "Material Rates",       icon: Hammer,          featureKey: "material_sourcing" },
   { href: "/dashboard/muster-roll",         label: "Muster Roll",          icon: Users,           featureKey: "worker_allocation" },
   { href: "/dashboard/risk-advisor",        label: "Construction Risk Checklist", icon: ShieldAlert, featureKey: "risk_advisory" },
-  { href: "/dashboard/cost-prediction",     label: "AI Cost Predictor",    icon: DollarSign,      featureKey: "boq", largeOnly: true },
-  { href: "/dashboard/time-prediction",     label: "Time Prediction",      icon: Clock,           featureKey: "projects", largeOnly: true },
-  { href: "/dashboard/resource-allocation", label: "Worker Allocation",   icon: Users,           featureKey: "worker_allocation", largeOnly: true },
+  { href: "/dashboard/cost-prediction",     label: "AI Cost Predictor",    icon: DollarSign,      featureKey: "ai_cost_prediction" },
+  { href: "/dashboard/time-prediction",     label: "Time Prediction",      icon: Clock,           featureKey: "time_prediction" },
+  { href: "/dashboard/resource-allocation", label: "Worker Allocation",    icon: Users,           featureKey: "advanced_worker_allocation" },
 ];
 
 const customerLinks = [
@@ -70,7 +70,7 @@ export default function DashboardLayout({ children }) {
   }, [user, loading, pathname, router]);
 
   const scaleTier = user?.builderScale || "SMALL";
-  const visibleLinks = builderLinks.filter(link => !link.largeOnly || scaleTier === "LARGE");
+  const visibleLinks = builderLinks;
   const scaleColorMap = {
     SMALL: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
     MID: "bg-blue-500/20 text-blue-300 border-blue-500/30",
@@ -79,7 +79,7 @@ export default function DashboardLayout({ children }) {
 
   // Check authorization for current page
   const currentLink = builderLinks.find(l => l.href === pathname);
-  const isAuthorized = !currentLink || (!currentLink.largeOnly || scaleTier === "LARGE") && canAccessFeature(currentLink.featureKey);
+  const isAuthorized = !currentLink || canAccessFeature(currentLink.featureKey);
 
   const handleLogout = () => {
     logout();
@@ -203,20 +203,7 @@ export default function DashboardLayout({ children }) {
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </button>
 
-            <select
-              className="bg-slate-100 border border-slate-200 text-xs font-bold px-2 py-1 rounded cursor-pointer"
-              value={locale}
-              onChange={(e) => {
-                localStorage.setItem("buildsmart_locale", e.target.value);
-                setLocale(e.target.value);
-                window.dispatchEvent(new Event("languageChanged"));
-              }}
-            >
-              <option value="en">English (EN)</option>
-              <option value="hi">हिंदी (HI)</option>
-              <option value="mr">मराठी (MR)</option>
-            </select>
-            <span className="text-xs text-slate-500 hidden md:block">SQLite DB Connected</span>
+            <span className="text-xs text-slate-500 hidden md:block">System Online</span>
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </div>
         </header>

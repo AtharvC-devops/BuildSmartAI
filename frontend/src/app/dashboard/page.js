@@ -200,7 +200,7 @@ export default function BuilderDashboard() {
           <PlusCircle className="w-14 h-14 text-blue-500 mx-auto" />
           <h3 className="text-lg font-bold text-slate-800">No Projects Found</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            You currently have no active construction projects. Click below to create your first project saved directly in MySQL!
+            You currently have no active construction projects. Click below to create your first project!
           </p>
           <button
             onClick={() => setProjectModalOpen(true)}
@@ -537,7 +537,7 @@ export default function BuilderDashboard() {
                     disabled={creatingProj}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-md transition-colors disabled:opacity-50"
                   >
-                    {creatingProj ? "Saving to MySQL..." : "Save Project to MySQL"}
+                    {creatingProj ? "Saving Project..." : "Save Project"}
                   </button>
                 </div>
               </form>

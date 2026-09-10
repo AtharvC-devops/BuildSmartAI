@@ -27,7 +27,7 @@ export default function LoginPage() {
       } else if (userProfile?.role === "client") {
         router.push("/client");
       } else {
-        router.push("/dashboard");
+        router.push("/dashboard/ra-billing");
       }
     } catch (err) {
       setError(err.message || "Invalid email or password. Please check your credentials.");

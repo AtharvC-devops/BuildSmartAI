@@ -209,7 +209,7 @@ export default function LandingPage() {
             className="text-center mb-14"
           >
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Powered by <span className="gradient-text">Machine Learning</span>
+              Powered by <span className="gradient-text">Artificial Intelligence</span>
             </h2>
             <p className="text-slate-400 max-w-xl mx-auto">
               Every decision backed by data. Every prediction refined by AI models trained on real construction data.
