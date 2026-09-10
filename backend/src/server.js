@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth.routes");
 const portfolioRoutes = require("./routes/portfolio.routes");
 const persistentRoutes = require("./routes/persistent.routes");
 const raBillingRoutes = require("./routes/ra-billing.routes");
+const measurementBookRoutes = require("./routes/measurement-book.routes");
 const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api", aiRoutes);
 app.use("/api", persistentRoutes);
+app.use("/api", measurementBookRoutes);
 app.use("/api", raBillingRoutes);
 app.use("/api", projectRoutes);
 app.use("/api", userRoutes);
