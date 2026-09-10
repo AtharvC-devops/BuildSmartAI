@@ -138,8 +138,8 @@ export default function MeasurementBookPage() {
     setBoqSummary(null);
 
     getProjectBOQ(Number(selectedProjectId))
-      .then((items) => {
-        const list = items || [];
+      .then((res) => {
+        const list = Array.isArray(res) ? res : (res?.items || []);
         setBoqItems(list);
         if (list.length > 0) {
           setSelectedBoqItemId(String(list[0].id));
@@ -180,6 +180,7 @@ export default function MeasurementBookPage() {
 
   // Find active BOQ item object
   const activeBoqItem = useMemo(() => {
+    if (!Array.isArray(boqItems)) return null;
     return boqItems.find((b) => String(b.id) === String(selectedBoqItemId)) || null;
   }, [boqItems, selectedBoqItemId]);
 
@@ -382,9 +383,9 @@ export default function MeasurementBookPage() {
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={selectedBoqItemId}
             onChange={(e) => setSelectedBoqItemId(e.target.value)}
-            disabled={loading || boqItems.length === 0}
+            disabled={loading || !Array.isArray(boqItems) || boqItems.length === 0}
           >
-            {boqItems.length === 0 ? (
+            {!Array.isArray(boqItems) || boqItems.length === 0 ? (
               <option value="">No BOQ Items Found</option>
             ) : (
               boqItems.map((b) => (
