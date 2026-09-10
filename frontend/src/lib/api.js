@@ -24,13 +24,21 @@ async function request(path, options = {}) {
     try {
       errData = await res.json();
     } catch (_) {}
-    throw new Error(errData?.error?.message || `API Error: ${res.status}`);
+    const msg = errData?.error?.message || errData?.message || `API Error: ${res.status}`;
+    const err = new Error(msg);
+    err.code = errData?.error?.code || errData?.code;
+    err.status = res.status;
+    err.details = errData?.error?.details || errData?.details;
+    throw err;
   }
   
   const json = await res.json();
   if (json && typeof json === "object" && "success" in json) {
     if (!json.success) {
-      throw new Error(json.error?.message || "API request failed");
+      const msg = json.error?.message || "API request failed";
+      const err = new Error(msg);
+      err.code = json.error?.code;
+      throw err;
     }
     return json.data;
   }
@@ -149,10 +157,18 @@ export const getProjectMeasurements = (projectId, params = {}) => {
   const qs = new URLSearchParams(params).toString();
   return request(`/projects/${projectId}/measurements${qs ? "?" + qs : ""}`);
 };
+export const getBOQItemMeasurements = (projectId, boqItemId) =>
+  request(`/projects/${projectId}/boq/${boqItemId}/measurements`);
 export const createProjectMeasurement = (projectId, data) =>
   request(`/projects/${projectId}/measurements`, { method: "POST", body: JSON.stringify(data) });
+export const updateProjectMeasurement = (projectId, measId, data) =>
+  request(`/projects/${projectId}/measurements/${measId}`, { method: "PUT", body: JSON.stringify(data) });
 export const updateProjectMeasurementStatus = (projectId, measId, status, rejectionReason) =>
   request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status, rejectionReason }) });
+export const verifyProjectMeasurement = (projectId, measId, remarks) =>
+  request(`/projects/${projectId}/measurements/${measId}/verify`, { method: "PATCH", body: JSON.stringify({ remarks }) });
+export const rejectProjectMeasurement = (projectId, measId, remarks) =>
+  request(`/projects/${projectId}/measurements/${measId}/reject`, { method: "PATCH", body: JSON.stringify({ remarks }) });
 
 
 // ── Labour and Muster Roll Endpoints ────────────────────────────────────
