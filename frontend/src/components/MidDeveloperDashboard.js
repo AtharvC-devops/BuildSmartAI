@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDollarSign, ClipboardList, FileText, IndianRupee, Loader2, Package, Receipt, ShieldCheck, Users } from "lucide-react";
-import { getProjectCostTracking, getProjectDashboardData, getProjectLabour, getProjectLogs, getProjectMaterials, getProjectRABills, getProjectRiskCompliance, getProjectSchedule, getProjects } from "@/lib/api";
+import { AlertTriangle, ArrowRight, BarChart3, CalendarDays, CheckCircle2, CircleDollarSign, ClipboardList, FileText, IndianRupee, Loader2, Package, Plus, PlusCircle, Receipt, ShieldCheck, Users, X } from "lucide-react";
+import { createProject, getProjectCostTracking, getProjectDashboardData, getProjectLabour, getProjectLogs, getProjectMaterials, getProjectRABills, getProjectRiskCompliance, getProjectSchedule, getProjects } from "@/lib/api";
 
 function formatINR(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
@@ -16,13 +16,63 @@ export default function MidDeveloperDashboard() {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [creatingProj, setCreatingProj] = useState(false);
+
+  const [projectForm, setProjectForm] = useState({
+    name: "",
+    location: "",
+    budget: 5000000,
+    area: 2500,
+    floors: 2,
+    type: "residential"
+  });
+
+  const loadProjectsList = async () => {
+    try {
+      const list = await getProjects();
+      setProjects(list);
+      if (list.length && !selectedProjectId) setSelectedProjectId(String(list[0].id));
+      return list;
+    } catch {
+      setError("Could not load projects.");
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    getProjects().then(list => {
-      setProjects(list);
-      if (list.length) setSelectedProjectId(String(list[0].id));
-    }).catch(() => setError("Could not load projects.")).finally(() => setLoading(false));
+    loadProjectsList();
   }, []);
+
+  const handleCreateProject = async (e) => {
+    e.preventDefault();
+    setCreatingProj(true);
+    setError(null);
+    try {
+      const created = await createProject({
+        name: projectForm.name,
+        location: projectForm.location || "City Location",
+        budget: parseFloat(projectForm.budget),
+        area: parseFloat(projectForm.area),
+        floors: parseInt(projectForm.floors),
+        type: projectForm.type
+      });
+      setProjectModalOpen(false);
+      setProjectForm({ name: "", location: "", budget: 5000000, area: 2500, floors: 2, type: "residential" });
+      const list = await loadProjectsList();
+      if (created?.id) {
+        setSelectedProjectId(String(created.id));
+      } else if (list.length) {
+        setSelectedProjectId(String(list[0].id));
+      }
+    } catch (err) {
+      setError(err.message || "Failed to create project.");
+    } finally {
+      setCreatingProj(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -43,8 +93,140 @@ export default function MidDeveloperDashboard() {
     return () => { active = false; };
   }, [selectedProjectId]);
 
+  const renderProjectModal = () => (
+    projectModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
+              <Plus className="h-5 w-5 text-blue-600" /> Create New Construction Project
+            </h3>
+            <button
+              onClick={() => setProjectModalOpen(false)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateProject} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Project Name *</label>
+              <input
+                type="text"
+                required
+                value={projectForm.name}
+                onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                placeholder="e.g. Metro Developer Enclave"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Location *</label>
+                <input
+                  type="text"
+                  required
+                  value={projectForm.location}
+                  onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })}
+                  placeholder="e.g. Bandra West, Mumbai"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Project Type</label>
+                <select
+                  value={projectForm.type}
+                  onChange={(e) => setProjectForm({ ...projectForm, type: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="residential">Residential</option>
+                  <option value="commercial">Commercial</option>
+                  <option value="industrial">Industrial</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Budget (₹) *</label>
+                <input
+                  type="number"
+                  required
+                  value={projectForm.budget}
+                  onChange={(e) => setProjectForm({ ...projectForm, budget: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Area (sqft) *</label>
+                <input
+                  type="number"
+                  required
+                  value={projectForm.area}
+                  onChange={(e) => setProjectForm({ ...projectForm, area: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Floors *</label>
+                <input
+                  type="number"
+                  required
+                  value={projectForm.floors}
+                  onChange={(e) => setProjectForm({ ...projectForm, floors: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setProjectModalOpen(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingProj}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {creatingProj ? "Saving..." : "Save Project"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )
+  );
+
   if (loading && !snapshot && !projects.length) return <div className="flex min-h-[280px] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>;
-  if (!projects.length) return <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600">Create a project to begin regional project cost and contractor control.</div>;
+
+  if (!projects.length) {
+    return (
+      <div className="mx-auto my-12 max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+        <PlusCircle className="mx-auto h-14 w-14 text-blue-600" />
+        <h3 className="text-lg font-bold text-slate-800">No Active Projects</h3>
+        <p className="mx-auto max-w-md text-sm text-slate-500">
+          Create a project to begin regional project cost and contractor control.
+        </p>
+        <button
+          onClick={() => setProjectModalOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4" /> Create Your First Project
+        </button>
+
+        {renderProjectModal()}
+      </div>
+    );
+  }
 
   const dashboard = snapshot?.dashboard || {};
   const costs = snapshot?.costs?.summary || {};
@@ -72,8 +254,22 @@ export default function MidDeveloperDashboard() {
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="rounded-2xl bg-blue-950 p-5 text-white shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">Regional developer workspace</p><h2 className="mt-1 text-2xl font-bold">{project?.name || "Project health"}</h2><p className="mt-1 text-sm text-blue-100">Cost control, contractor billing, material rates, progress, and compliance.</p></div>
-          <select value={selectedProjectId} onChange={event => setSelectedProjectId(event.target.value)} className="rounded-lg border border-blue-800 bg-blue-900 px-3 py-2 text-sm text-white">{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">Regional developer workspace</p>
+            <h2 className="mt-1 text-2xl font-bold">{project?.name || "Project health"}</h2>
+            <p className="mt-1 text-sm text-blue-100">Cost control, contractor billing, material rates, progress, and compliance.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setProjectModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-blue-500"
+            >
+              <Plus className="h-4 w-4" /> Add New Project
+            </button>
+            <select value={selectedProjectId} onChange={event => setSelectedProjectId(event.target.value)} className="rounded-lg border border-blue-800 bg-blue-900 px-3 py-2 text-sm text-white">
+              {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </div>
         </div>
       </header>
 
@@ -103,6 +299,7 @@ export default function MidDeveloperDashboard() {
 
       <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="flex items-center gap-2 font-bold text-slate-800"><FileText className="h-4 w-4 text-blue-600" /> Recent daily logs</h3>{logs.slice(0, 4).map(log => <div key={log.id} className="border-b border-slate-100 py-3 text-xs"><div className="flex justify-between"><strong>{log.date}</strong><span>{log.workers || 0} workers</span></div><p className="mt-1 text-slate-500">{log.tasks || "Work recorded"}</p></div>)}</section><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="flex items-center gap-2 font-bold text-slate-800"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Regional compliance</h3><p className="mt-2 text-sm text-slate-500">Track project-specific RERA and authority documents with due dates and source references.</p><Link href="/dashboard/risk-advisor" className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-700">Open compliance tracker <ArrowRight className="h-3 w-3" /></Link></section></div>
       {error && <p className="text-center text-sm text-red-600">{error}</p>}
+      {renderProjectModal()}
     </div>
   );
 }

@@ -1,22 +1,39 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  IndianRupee, Sparkles, Loader2, Plus, Receipt, FileText, CheckCircle2,
-  AlertTriangle, Layers, PlusCircle, X, ChevronRight, Check, Ban, CreditCard, Filter
+  Loader2, Plus, Receipt, FileText, CheckCircle2, AlertTriangle,
+  X, Check, Ban, CreditCard, ChevronDown, ChevronUp, Download,
+  Ruler, ClipboardList, ArrowRight
 } from "lucide-react";
 import {
-  getProjects, getProjectBOQ, getPWDRates, getProjectContractors,
-  getProjectContracts, getProjectRABills, createProjectRABill, addProjectRABillItem,
-  updateProjectRABillStatus, downloadProjectRABillPdf
+  getProjects, getProjectBOQ, getProjectContractors,
+  getProjectContracts, getProjectRABills, getProjectRABill,
+  createProjectRABill, updateProjectRABillStatus,
+  downloadProjectRABillExcel,
+  getProjectMeasurements, createProjectMeasurement, updateProjectMeasurementStatus
 } from "@/lib/api";
 
 function formatINR(n) {
   if (n === null || n === undefined || isNaN(n)) return "—";
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  return `₹${Math.round(Number(n)).toLocaleString("en-IN")}`;
 }
 
+const STATUS_CONFIG = {
+  draft:     { label: "Draft",     color: "bg-slate-100 text-slate-700", badge: "slate" },
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-700",   badge: "blue" },
+  verified:  { label: "Verified",  color: "bg-indigo-100 text-indigo-700", badge: "indigo" },
+  certified: { label: "Certified", color: "bg-emerald-100 text-emerald-700", badge: "emerald" },
+  paid:      { label: "Paid",      color: "bg-green-100 text-green-800", badge: "green" },
+  rejected:  { label: "Rejected",  color: "bg-red-100 text-red-700",    badge: "red" },
+};
+const MEAS_STATUS = {
+  draft:    "bg-slate-100 text-slate-700",
+  verified: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-red-100 text-red-700"
+};
+
 export default function RABillingPage() {
+  const [tab, setTab] = useState("bills"); // "bills" | "measurements"
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [contractors, setContractors] = useState([]);
@@ -24,720 +41,695 @@ export default function RABillingPage() {
   const [selectedContractorId, setSelectedContractorId] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
 
+  // Bills
   const [bills, setBills] = useState([]);
-  const [summary, setSummary] = useState({ draft: 0, submitted: 0, underReview: 0, approved: 0, rejected: 0, paid: 0, totalBills: 0, totalBilledAmount: 0, totalPaidAmount: 0, outstandingAmount: 0 });
-  const [boqItems, setBoqItems] = useState([]);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Bill Inspection / Drawer State
+  const [summary, setSummary] = useState({});
   const [selectedBill, setSelectedBill] = useState(null);
+  const [billAbstract, setBillAbstract] = useState([]);
+  const [billLoading, setBillLoading] = useState(false);
 
-  // Modals & form state
-  const [createBillModalOpen, setCreateBillModalOpen] = useState(false);
-  const [billForm, setBillForm] = useState({
-    contractorId: "",
-    contractId: "",
-    billNumber: "",
-    billingPeriodStart: "",
-    billingPeriodEnd: "",
-    workDescription: "",
-    advanceRecovery: 0,
-    penalty: 0,
-    otherDeduction: 0,
-    taxDeduction: 0
+  // Measurements
+  const [measurements, setMeasurements] = useState([]);
+  const [boqItems, setBoqItems] = useState([]);
+  const [measLoading, setMeasLoading] = useState(false);
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [expandedBillId, setExpandedBillId] = useState(null);
+
+  // Create bill modal
+  const [showCreateBill, setShowCreateBill] = useState(false);
+  const [createBillForm, setCreateBillForm] = useState({
+    contractId: "", contractorId: "",
+    billingPeriodStart: "", billingPeriodEnd: "", billDate: "",
+    agreementNumber: "", workDescription: "",
+    gstRate: 0, retentionRate: 0, otherDeductions: 0,
+    selectedMeasIds: []
   });
+  const [creating, setCreating] = useState(false);
 
-  const [addItemModalOpen, setAddItemModalOpen] = useState(false);
-  const [itemForm, setItemForm] = useState({
-    boqItemId: "",
-    quantityCompleted: 1,
-    rate: 0
+  // Add measurement modal
+  const [showAddMeas, setShowAddMeas] = useState(false);
+  const [measForm, setMeasForm] = useState({
+    boqItemId: "", measurementDate: new Date().toISOString().split("T")[0],
+    description: "", quantity: "", unit: "", recordedBy: ""
   });
+  const [addingMeas, setAddingMeas] = useState(false);
 
-  const [saving, setSaving] = useState(false);
-
-  // Load Projects
+  // Load projects on mount
   useEffect(() => {
-    async function loadProjects() {
-      try {
-        const projList = await getProjects();
-        setProjects(projList);
-        if (projList.length > 0) {
-          setSelectedProjectId(projList[0].id.toString());
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load projects.");
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadProjects();
+    getProjects().then(list => {
+      setProjects(list || []);
+      if (list?.length) setSelectedProjectId(String(list[0].id));
+    }).catch(() => setError("Failed to load projects."));
   }, []);
 
-  // Load Contractors, BOQ items and bills when project changes
-  const loadProjectDetails = async () => {
-    if (!selectedProjectId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const pid = parseInt(selectedProjectId);
-      const [contrs, contractList, boq] = await Promise.all([
-        getProjectContractors(pid),
-        getProjectContracts(pid),
-        getProjectBOQ(pid)
-      ]);
-      setContractors(contrs);
-      setContracts(contractList || []);
-      setBoqItems(boq.items || []);
-      if (contrs.length > 0) {
-        const firstContract = (contractList || []).find(contract => contract.contractor_id === contrs[0].id);
-        setBillForm(prev => ({ ...prev, contractorId: contrs[0].id.toString(), contractId: firstContract ? firstContract.id.toString() : "" }));
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to fetch project dependencies.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Load project-specific data when project changes
   useEffect(() => {
-    if (selectedProjectId) {
-      loadProjectDetails();
+    if (!selectedProjectId) return;
+    const pid = Number(selectedProjectId);
+    setLoading(true);
+    setError("");
+    Promise.all([
+      getProjectRABills(pid),
+      getProjectContractors(pid),
+      getProjectContracts(pid),
+      getProjectBOQ(pid)
+    ]).then(([billData, ctors, cts, boq]) => {
+      setBills(billData?.bills || []);
+      setSummary(billData?.summary || {});
+      setContractors(ctors?.contractors || ctors || []);
+      setContracts(cts?.contracts || cts || []);
+      setBoqItems(boq?.items || boq || []);
+      setSelectedBill(null);
+      setBillAbstract([]);
+    }).catch(e => setError(e.message || "Failed to load project data."))
+      .finally(() => setLoading(false));
+  }, [selectedProjectId]);
+
+  // Load measurements when measurements tab is opened
+  const loadMeasurements = useCallback(async () => {
+    if (!selectedProjectId) return;
+    setMeasLoading(true);
+    try {
+      const data = await getProjectMeasurements(Number(selectedProjectId));
+      setMeasurements(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e.message || "Failed to load measurements.");
+    } finally {
+      setMeasLoading(false);
     }
   }, [selectedProjectId]);
 
-  // Load Bills when filters change
-  const loadBills = async () => {
-    if (!selectedProjectId) return;
-    try {
-      const pid = parseInt(selectedProjectId);
-      const params = {};
-      if (selectedContractorId) params.contractorId = selectedContractorId;
-      if (selectedStatus) params.status = selectedStatus;
-
-      const data = await getProjectRABills(pid, params);
-      setBills(data.bills || []);
-      setSummary(data.summary || { pendingApproval: 0, approved: 0, paid: 0, totalPayable: 0 });
-
-      // Keep inspected bill details updated
-      if (selectedBill) {
-        const updatedInspected = data.bills.find(b => b.id === selectedBill.id);
-        setSelectedBill(updatedInspected || null);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
-    if (selectedProjectId) {
-      loadBills();
-    }
-  }, [selectedProjectId, selectedContractorId, selectedStatus]);
+    if (tab === "measurements") loadMeasurements();
+  }, [tab, loadMeasurements]);
 
-  const handleOpenCreateBill = () => {
-    setBillForm({
-      contractorId: contractors.length > 0 ? contractors[0].id.toString() : "",
-      contractId: contracts.length > 0 ? contracts[0].id.toString() : "",
-      billNumber: "",
-      billingPeriodStart: "",
-      billingPeriodEnd: "",
-      workDescription: "",
-      advanceRecovery: 0,
-      penalty: 0,
-      otherDeduction: 0,
-      taxDeduction: 0
-    });
-    setCreateBillModalOpen(true);
-  };
-
-  const handleSaveBill = async (e) => {
-    e.preventDefault();
-    setSaving(true);
+  const loadBillDetail = async (bill) => {
+    setSelectedBill(bill);
+    setBillAbstract([]);
+    setBillLoading(true);
     try {
-      await createProjectRABill(parseInt(selectedProjectId), {
-        ...billForm,
-        contractorId: parseInt(billForm.contractorId),
-        contractId: parseInt(billForm.contractId)
-      });
-      await loadBills();
-      setCreateBillModalOpen(false);
-    } catch (err) {
-      alert("Error creating bill draft: " + err.message);
+      const data = await getProjectRABill(Number(selectedProjectId), bill.id);
+      setBillAbstract(data?.abstract || []);
+    } catch (e) {
+      setError("Failed to load bill details.");
     } finally {
-      setSaving(false);
+      setBillLoading(false);
     }
   };
 
-  const handleOpenAddItem = () => {
-    if (!selectedBill) return;
-    setItemForm({
-      boqItemId: boqItems.length > 0 ? boqItems[0].id.toString() : "",
-      quantityCompleted: 1,
-      rate: boqItems.length > 0 ? boqItems[0].rate : 0
-    });
-    setAddItemModalOpen(true);
-  };
-
-  const handleBoqItemSelect = (itemId) => {
-    const item = boqItems.find(i => i.id === parseInt(itemId));
-    if (item) {
-      setItemForm(prev => ({
-        ...prev,
-        boqItemId: itemId,
-        rate: item.rate
-      }));
+  const handleStatusTransition = async (bill, newStatus) => {
+    if (!confirm(`Move bill ${bill.bill_number} to ${newStatus.toUpperCase()}?`)) return;
+    try {
+      await updateProjectRABillStatus(Number(selectedProjectId), bill.id, newStatus);
+      // Reload
+      const billData = await getProjectRABills(Number(selectedProjectId));
+      setBills(billData?.bills || []);
+      setSummary(billData?.summary || {});
+      if (selectedBill?.id === bill.id) {
+        const updated = (billData?.bills || []).find(b => b.id === bill.id);
+        if (updated) setSelectedBill(updated);
+      }
+    } catch (e) {
+      setError(e.message || "Status transition failed.");
     }
   };
 
-  const handleAddItem = async (e) => {
+  const handleExcelDownload = async (bill) => {
+    try {
+      const blob = await downloadProjectRABillExcel(Number(selectedProjectId), bill.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `RA_Bill_${String(bill.bill_sequence || 1).padStart(2,"0")}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e.message || "Excel download failed.");
+    }
+  };
+
+  const handleCreateBill = async (e) => {
     e.preventDefault();
-    setSaving(true);
+    if (!createBillForm.contractId || !createBillForm.contractorId) {
+      setError("Please select a contract and contractor.");
+      return;
+    }
+    if (createBillForm.selectedMeasIds.length === 0) {
+      setError("Select at least one verified measurement.");
+      return;
+    }
+    setCreating(true);
+    setError("");
     try {
-      await addProjectRABillItem(parseInt(selectedProjectId), selectedBill.id, {
-        boqItemId: parseInt(itemForm.boqItemId),
-        currentQuantity: parseFloat(itemForm.quantityCompleted)
+      await createProjectRABill(Number(selectedProjectId), {
+        contractId: Number(createBillForm.contractId),
+        contractorId: Number(createBillForm.contractorId),
+        billingPeriodStart: createBillForm.billingPeriodStart,
+        billingPeriodEnd: createBillForm.billingPeriodEnd,
+        billDate: createBillForm.billDate,
+        agreementNumber: createBillForm.agreementNumber,
+        workDescription: createBillForm.workDescription,
+        gstRate: Number(createBillForm.gstRate),
+        retentionRate: Number(createBillForm.retentionRate),
+        otherDeductions: Number(createBillForm.otherDeductions),
+        measurementIds: createBillForm.selectedMeasIds
       });
-      await loadBills();
-      setAddItemModalOpen(false);
-    } catch (err) {
-      alert("Error adding item: " + err.message);
+      setShowCreateBill(false);
+      setCreateBillForm({ contractId: "", contractorId: "", billingPeriodStart: "", billingPeriodEnd: "", billDate: "", agreementNumber: "", workDescription: "", gstRate: 0, retentionRate: 0, otherDeductions: 0, selectedMeasIds: [] });
+      const billData = await getProjectRABills(Number(selectedProjectId));
+      setBills(billData?.bills || []);
+      setSummary(billData?.summary || {});
+    } catch (e) {
+      setError(e.message || "Failed to create RA bill.");
     } finally {
-      setSaving(false);
+      setCreating(false);
     }
   };
 
-  const handleStatusTransition = async (billId, status, extra = {}) => {
+  const handleAddMeasurement = async (e) => {
+    e.preventDefault();
+    if (!measForm.boqItemId || !measForm.quantity) {
+      setError("BOQ item and quantity are required.");
+      return;
+    }
+    setAddingMeas(true);
+    setError("");
     try {
-      await updateProjectRABillStatus(parseInt(selectedProjectId), billId, status, extra);
-      await loadBills();
-    } catch (err) {
-      alert("Status transition failed: " + err.message);
+      await createProjectMeasurement(Number(selectedProjectId), measForm);
+      setShowAddMeas(false);
+      setMeasForm({ boqItemId: "", measurementDate: new Date().toISOString().split("T")[0], description: "", quantity: "", unit: "", recordedBy: "" });
+      await loadMeasurements();
+    } catch (e) {
+      setError(e.message || "Failed to add measurement.");
+    } finally {
+      setAddingMeas(false);
     }
   };
 
-  const handleDownload = async () => {
-    const blob = await downloadProjectRABillPdf(parseInt(selectedProjectId), selectedBill.id);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${selectedBill.billNumber}.pdf`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handlePrint = () => window.print();
-
-  const getStatusBadge = (status) => {
-    const st = (status || "").toLowerCase();
-    switch (st) {
-      case "draft":
-        return "bg-slate-100 text-slate-700 border-slate-200";
-      case "submitted":
-        return "bg-blue-50 text-blue-700 border-blue-100";
-      case "under_review":
-        return "bg-amber-50 text-amber-700 border-amber-100";
-      case "approved":
-        return "bg-emerald-50 text-emerald-700 border-emerald-100";
-      case "paid":
-        return "bg-indigo-50 text-indigo-700 border-indigo-100";
-      case "rejected":
-        return "bg-red-50 text-red-700 border-red-100";
-      default:
-        return "bg-slate-100 text-slate-700 border-slate-200";
+  const handleMeasStatus = async (meas, status) => {
+    try {
+      await updateProjectMeasurementStatus(Number(selectedProjectId), meas.id, status);
+      await loadMeasurements();
+    } catch (e) {
+      setError(e.message || "Failed to update measurement.");
     }
   };
 
-  if (loading && projects.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[350px] space-y-3">
-        <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-        <span className="text-slate-500 text-sm">Loading RA Bill module...</span>
-      </div>
-    );
-  }
+  const project = projects.find(p => String(p.id) === selectedProjectId);
+  const verifiedUnbilled = measurements.filter(m => m.status === "verified" && !m.is_billed);
+
+  const nextActions = (status) => {
+    const transitions = {
+      draft:     ["submitted"],
+      submitted: ["verified", "rejected"],
+      verified:  ["certified", "rejected"],
+      certified: ["paid"],
+      rejected:  ["draft"],
+      paid: []
+    };
+    return transitions[String(status).toLowerCase()] || [];
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">RA (Running Account) Billing</h2>
-          <p className="text-xs text-slate-500 mt-1">Manage, verify, and approve contractor certifications linked to project BOQs</p>
+    <div className="mx-auto max-w-7xl space-y-5">
+      {/* Header */}
+      <header className="rounded-2xl bg-slate-900 p-5 text-white shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">RA Billing Module</p>
+            <h2 className="mt-1 text-2xl font-bold">Contractor Running Account Bills</h2>
+            <p className="mt-1 text-sm text-slate-300">BOQ → Verified Measurements → RA Bills → Certification → Payment</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={selectedProjectId}
+              onChange={e => setSelectedProjectId(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
+            >
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
         </div>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <label className="text-xs font-semibold text-slate-600 shrink-0">Select Project:</label>
-          <select
-            className="input-field max-w-[220px] bg-slate-50"
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-          >
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name} ({p.location})</option>
-            ))}
-          </select>
-        </div>
+      </header>
 
-      </div>
-
-      {/* RA Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-        {[['Total Bills', summary.totalBills, 'text-slate-800'], ['Draft', summary.draft, 'text-slate-700'], ['Submitted', summary.submitted, 'text-blue-700'], ['Under Review', summary.underReview, 'text-amber-700'], ['Approved', summary.approved, 'text-emerald-700'], ['Paid', summary.paid, 'text-indigo-700']].map(([label, value, tone]) => (
-          <div key={label} className="glass-card p-3 text-center">
-            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{label}</div>
-            <div className={`text-lg font-black mt-1 ${tone}`}>{value}</div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        {[
+          { label: "Total Bills",       value: summary.totalBills || 0 },
+          { label: "Draft",             value: summary.draft || 0 },
+          { label: "Submitted",         value: summary.submitted || 0 },
+          { label: "Certified",         value: summary.certified || 0 },
+          { label: "Paid",              value: summary.paid || 0 },
+          { label: "Outstanding",       value: formatINR(summary.outstandingAmount) },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
+            <p className="mt-1 text-sm font-black text-slate-800">{value}</p>
           </div>
         ))}
-        <div className="glass-card p-3 text-center border-l-4 border-l-slate-700">
-          <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Total Billed</div>
-          <div className="text-sm font-black text-slate-800 mt-1">{formatINR(summary.totalBilledAmount)}</div>
-        </div>
-        <div className="glass-card p-3 text-center border-l-4 border-l-rose-500">
-          <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Outstanding</div>
-          <div className="text-sm font-black text-rose-700 mt-1">{formatINR(summary.outstandingAmount)}</div>
-        </div>
       </div>
 
-      {/* Filters & Actions bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex flex-wrap gap-3 items-center text-xs">
-          <div className="flex items-center gap-1.5 text-slate-500 font-bold">
-            <Filter className="w-3.5 h-3.5" /> Filters:
-          </div>
-          <select
-            value={selectedContractorId}
-            onChange={(e) => setSelectedContractorId(e.target.value)}
-            className="input-field bg-slate-50 max-w-[200px]"
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-200">
+        {[
+          { key: "bills", label: "RA Bills", icon: Receipt },
+          { key: "measurements", label: "Site Measurements", icon: Ruler }
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+              tab === key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
           >
-            <option value="">All Contractors</option>
-            {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="input-field bg-slate-50 max-w-[150px]"
-          >
-            <option value="">All Statuses</option>
-            <option value="draft">Draft</option>
-            <option value="submitted">Submitted</option>
-            <option value="under_review">Under Review</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="paid">Paid</option>
-          </select>
-        </div>
-
-        <button
-          onClick={handleOpenCreateBill}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg flex items-center gap-1 shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Create RA Bill
-        </button>
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Side: RA Bills list */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200/80 bg-slate-50/50">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                <Receipt className="w-4 h-4 text-indigo-600" /> Active Running Account Bills
-              </h3>
-            </div>
-            {bills.length === 0 ? (
-              <div className="p-16 text-center text-slate-400 text-xs">
-                No Running Account bills found matching the filters.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {bills.map((bill) => (
-                  <div
-                    key={bill.id}
-                    onClick={() => setSelectedBill(bill)}
-                    className={`p-4 cursor-pointer hover:bg-slate-50/70 transition-colors flex justify-between items-center text-xs gap-3 ${
-                      selectedBill?.id === bill.id ? "bg-indigo-50/20 border-l-4 border-l-indigo-600" : ""
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-800 text-sm">{bill.billNumber}</span>
-                        <span className="text-slate-400">•</span>
-                        <span className="font-semibold text-slate-600">{bill.contractorName}</span>
-                      </div>
-                      <p className="text-slate-500 text-[11px]">{bill.workDescription}</p>
-                      <div className="text-[10px] text-slate-400">
-                        Period: {bill.billingPeriod} • Created on: {bill.date}
-                      </div>
-                    </div>
-
-                    <div className="text-right flex items-center gap-4 shrink-0">
-                      <div>
-                        <div className="font-black text-slate-800 text-sm">{formatINR(bill.netPayable)}</div>
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold border mt-1 ${getStatusBadge(bill.status)}`}>
-                          {bill.status}
-                        </span>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-slate-400" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+          <button onClick={() => setError("")} className="ml-auto"><X className="h-4 w-4" /></button>
         </div>
+      )}
 
-        {/* Right Side: Inspector drawer */}
-        <div className="lg:col-span-1">
-          {selectedBill ? (
-            <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden sticky top-6">
-              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-                <div>
-                  <h4 className="font-bold text-xs">BILL DETAILS INSPECTOR</h4>
-                  <p className="text-[10px] text-slate-400 font-semibold">{selectedBill.billNumber}</p>
-                </div>
-                <button onClick={() => setSelectedBill(null)} className="text-slate-400 hover:text-white transition-colors">
-                  <X className="w-4.5 h-4.5" />
-                </button>
-              </div>
+      {/* ── RA BILLS TAB ───────────────────────────────────────────────────── */}
+      {tab === "bills" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800">RA Bills for {project?.name || "Project"}</h3>
+            <button
+              onClick={() => setShowCreateBill(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-700"
+            >
+              <Plus className="h-4 w-4" /> Create RA Bill
+            </button>
+          </div>
 
-              <div className="p-5 space-y-5 text-xs text-left">
-                {/* Status Transitions */}
-                <div className="border-b border-slate-100 pb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-slate-500">Current Status:</span>
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-bold border ${getStatusBadge(selectedBill.status)}`}>
-                      {selectedBill.status}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {selectedBill.status.toLowerCase() === "draft" && (
-                      <button
-                        onClick={() => handleStatusTransition(selectedBill.id, "Submitted")}
-                        className="px-2.5 py-1 bg-blue-600 text-white rounded text-[10px] font-bold hover:bg-blue-700 flex items-center gap-0.5"
-                      >
-                        Submit Bill
-                      </button>
-                    )}
-                    {selectedBill.status.toLowerCase() === "submitted" && (
-                      <button
-                        onClick={() => handleStatusTransition(selectedBill.id, "Under Review")}
-                        className="px-2.5 py-1 bg-amber-600 text-white rounded text-[10px] font-bold hover:bg-amber-700 flex items-center gap-0.5"
-                      >
-                        <Check className="w-3 h-3" /> Start Review
-                      </button>
-                    )}
-                    {selectedBill.status.toLowerCase() === "under_review" && (
-                      <>
-                        <button
-                          onClick={() => handleStatusTransition(selectedBill.id, "Approved")}
-                          className="px-2.5 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-700 flex items-center gap-0.5"
-                        >
-                          <Check className="w-3 h-3" /> Approve
-                        </button>
-                        <button
-                          onClick={() => {
-                            const rejectionReason = window.prompt("Reason for rejection");
-                            if (rejectionReason) handleStatusTransition(selectedBill.id, "Rejected", { rejectionReason });
-                          }}
-                          className="px-2.5 py-1 bg-red-600 text-white rounded text-[10px] font-bold hover:bg-red-700 flex items-center gap-0.5"
-                        >
-                          <Ban className="w-3 h-3" /> Reject
-                        </button>
-                      </>
-                    )}
-                    {selectedBill.status.toLowerCase() === "approved" && (
-                      <button
-                        onClick={() => {
-                          const paymentReference = window.prompt("Payment reference");
-                          if (paymentReference) handleStatusTransition(selectedBill.id, "Paid", { paymentReference, paymentDate: new Date().toISOString().slice(0, 10), paymentAmount: selectedBill.netPayable });
-                        }}
-                        className="px-2.5 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold hover:bg-indigo-700 flex items-center gap-0.5"
-                      >
-                        <CreditCard className="w-3 h-3" /> Mark Paid
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={handlePrint} className="px-2.5 py-1 border border-slate-200 text-slate-600 rounded text-[10px] font-bold flex items-center gap-1"><FileText className="w-3 h-3" /> Print Preview</button>
-                    <button onClick={handleDownload} className="px-2.5 py-1 bg-slate-800 text-white rounded text-[10px] font-bold flex items-center gap-1"><Receipt className="w-3 h-3" /> Download PDF</button>
-                  </div>
-                </div>
-
-                {/* Details list */}
-                <div className="space-y-2 border-b border-slate-100 pb-4">
-                  <div className="flex justify-between"><span className="text-slate-400">Contractor:</span> <span className="font-bold text-slate-800">{selectedBill.contractorName}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Billing Period:</span> <span className="font-medium text-slate-700">{selectedBill.billingPeriod}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">GST Charged:</span> <span className="font-semibold text-slate-700">{selectedBill.gstPercent}%</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Retention Margin:</span> <span className="font-semibold text-slate-700">{selectedBill.retentionPercent}%</span></div>
-                </div>
-
-                {/* Work Line Items */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-800 text-xs">Work Progress Items</span>
-                    {selectedBill.status.toLowerCase() === "draft" && (
-                      <button
-                        onClick={handleOpenAddItem}
-                        className="text-indigo-600 hover:text-indigo-800 font-bold text-[10px] flex items-center gap-0.5"
-                      >
-                        <PlusCircle className="w-3 h-3" /> Add Item
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                    {selectedBill.items?.length === 0 ? (
-                      <div className="p-4 text-center text-slate-400 text-[11px] bg-slate-50 rounded">
-                        No certified items added yet.
-                      </div>
-                    ) : (
-                      selectedBill.items.map((item) => {
-                        const boqRef = boqItems.find(b => b.id === item.boqItemId) || { description: "Work Item" };
-                        return (
-                          <div key={item.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded space-y-1">
-                            <p className="font-bold text-[11px] text-slate-800">{boqRef.description}</p>
-                            <div className="flex justify-between text-[10px] text-slate-500">
-                              <span>Contract: {item.contractQuantity} • Prev: {item.prevQuantity} • Current: {item.quantityCompleted} • Cum: {item.cumulativeQuantity}</span>
-                              <span className="font-bold text-slate-700">{formatINR(item.currentAmount)}</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {/* Financial Summary */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-2">
-                  <div className="flex justify-between font-semibold"><span className="text-slate-500">Gross Current Bill:</span> <span className="text-slate-800">{formatINR(selectedBill.grossAmount)}</span></div>
-                  <div className="flex justify-between text-red-600"><span className="text-slate-500">Retention:</span> <span>-{formatINR(selectedBill.deductions?.retention)}</span></div>
-                  <div className="flex justify-between text-red-600"><span className="text-slate-500">Other Deductions:</span> <span>-{formatINR((selectedBill.deductions?.advanceRecovery || 0) + (selectedBill.deductions?.penalty || 0) + (selectedBill.deductions?.otherDeduction || 0) + (selectedBill.deductions?.taxDeduction || 0))}</span></div>
-                  <div className="flex justify-between text-slate-700"><span className="text-slate-500">GST:</span> <span>+{formatINR(selectedBill.deductions?.gst)}</span></div>
-                  <div className="h-[1px] bg-slate-200 my-1"></div>
-                  <div className="flex justify-between font-black text-slate-900 text-sm"><span>Net Certified:</span> <span>{formatINR(selectedBill.netPayable)}</span></div>
-                </div>
-              </div>
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+          ) : bills.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+              <Receipt className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+              <p className="font-semibold text-slate-600">No RA Bills yet</p>
+              <p className="mt-1 text-sm text-slate-400">Record and verify site measurements first, then create your first RA bill.</p>
+              <button onClick={() => setTab("measurements")} className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:underline">
+                Go to Site Measurements <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 border border-dashed border-slate-300 rounded-2xl">
-              Select an RA bill from the list to inspect certified line items, status logs, and tax calculations.
+            <div className="space-y-3">
+              {bills.map(bill => {
+                const statusCfg = STATUS_CONFIG[String(bill.status).toLowerCase()] || STATUS_CONFIG.draft;
+                const actions = nextActions(bill.status);
+                const isExpanded = expandedBillId === bill.id;
+
+                return (
+                  <div key={bill.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    {/* Bill Row Summary */}
+                    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                          <Receipt className="h-5 w-5 text-slate-600" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{bill.bill_number}</p>
+                          <p className="text-xs text-slate-500">{bill.contractor_name || "Contractor"} · {bill.billing_period_start} – {bill.billing_period_end}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${statusCfg.color}`}>{statusCfg.label}</span>
+                        <span className="text-sm font-black text-slate-900">{formatINR(bill.net_payable)}</span>
+
+                        {/* Status action buttons */}
+                        {actions.includes("submitted") && (
+                          <button onClick={() => handleStatusTransition(bill, "submitted")} className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700">Submit</button>
+                        )}
+                        {actions.includes("verified") && (
+                          <button onClick={() => handleStatusTransition(bill, "verified")} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-indigo-700">Verify</button>
+                        )}
+                        {actions.includes("certified") && (
+                          <button onClick={() => handleStatusTransition(bill, "certified")} className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-700">Certify</button>
+                        )}
+                        {actions.includes("paid") && (
+                          <button onClick={() => handleStatusTransition(bill, "paid")} className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700">Mark Paid</button>
+                        )}
+                        {actions.includes("rejected") && (
+                          <button onClick={() => handleStatusTransition(bill, "rejected")} className="rounded-lg bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-200">Reject</button>
+                        )}
+                        {actions.includes("draft") && (
+                          <button onClick={() => handleStatusTransition(bill, "draft")} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200">Reopen</button>
+                        )}
+
+                        <button
+                          onClick={() => handleExcelDownload(bill)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          <Download className="h-3 w-3" /> Excel
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (isExpanded) {
+                              setExpandedBillId(null);
+                            } else {
+                              setExpandedBillId(bill.id);
+                              await loadBillDetail(bill);
+                            }
+                          }}
+                          className="rounded-lg border border-slate-200 p-1.5 hover:bg-slate-50"
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Abstract */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 p-4">
+                        {billLoading && selectedBill?.id === bill.id ? (
+                          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
+                        ) : (
+                          <>
+                            <h4 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500">RA Abstract (BOQ × Measurements)</h4>
+                            <div className="overflow-x-auto rounded-xl border border-slate-200">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-slate-800 text-white">
+                                    <th className="p-2 text-left">Description</th>
+                                    <th className="p-2 text-center">Unit</th>
+                                    <th className="p-2 text-right">Rate</th>
+                                    <th className="p-2 text-right">Contract Qty</th>
+                                    <th className="p-2 text-right bg-slate-700">Prev Qty</th>
+                                    <th className="p-2 text-right bg-slate-700">Prev Amt</th>
+                                    <th className="p-2 text-right bg-blue-900">This Bill Qty</th>
+                                    <th className="p-2 text-right bg-blue-900">This Bill Amt</th>
+                                    <th className="p-2 text-right bg-emerald-900">Total Qty</th>
+                                    <th className="p-2 text-right bg-emerald-900">Total Amt</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {billAbstract.map((item, idx) => (
+                                    <tr key={item.id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                                      <td className="p-2 font-medium text-slate-800">{item.description}</td>
+                                      <td className="p-2 text-center text-slate-600">{item.unit}</td>
+                                      <td className="p-2 text-right text-slate-700">{formatINR(item.rate)}</td>
+                                      <td className="p-2 text-right text-slate-600">{Number(item.contractQty || 0).toFixed(3)}</td>
+                                      <td className="p-2 text-right text-slate-600 bg-slate-50">{Number(item.previousQty || 0).toFixed(3)}</td>
+                                      <td className="p-2 text-right text-slate-700 bg-slate-50">{formatINR(item.previousAmount)}</td>
+                                      <td className="p-2 text-right font-semibold text-blue-700 bg-blue-50">{Number(item.thisBillQty || 0).toFixed(3)}</td>
+                                      <td className="p-2 text-right font-semibold text-blue-700 bg-blue-50">{formatINR(item.thisBillAmount)}</td>
+                                      <td className="p-2 text-right font-bold text-emerald-700 bg-emerald-50">{Number(item.totalQty || 0).toFixed(3)}</td>
+                                      <td className="p-2 text-right font-bold text-emerald-700 bg-emerald-50">{formatINR(item.totalAmount)}</td>
+                                    </tr>
+                                  ))}
+                                  {billAbstract.length === 0 && (
+                                    <tr><td colSpan={10} className="py-4 text-center text-slate-400">No items in this bill</td></tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Summary */}
+                            <div className="mt-4 ml-auto max-w-xs space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                              <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><strong>{formatINR(bill.subtotal || bill.gross_amount)}</strong></div>
+                              {Number(bill.gst_rate) > 0 && <div className="flex justify-between"><span className="text-slate-500">GST @ {bill.gst_rate}%</span><strong>{formatINR(bill.gst_amount)}</strong></div>}
+                              {Number(bill.retention_percent) > 0 && <div className="flex justify-between"><span className="text-slate-500">Retention @ {bill.retention_percent}%</span><strong className="text-red-600">({formatINR(bill.retention_amount)})</strong></div>}
+                              {Number(bill.other_deductions) > 0 && <div className="flex justify-between"><span className="text-slate-500">Other Deductions</span><strong className="text-red-600">({formatINR(bill.other_deductions)})</strong></div>}
+                              <div className="flex justify-between border-t border-slate-200 pt-2"><span className="font-bold text-slate-800">Net Payable</span><strong className="text-emerald-700">{formatINR(bill.net_payable)}</strong></div>
+                            </div>
+
+                            {/* Certification Track */}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {["draft","submitted","verified","certified","paid"].map((s, i) => {
+                                const cur = String(bill.status).toLowerCase();
+                                const statuses = ["draft","submitted","verified","certified","paid"];
+                                const curIdx = statuses.indexOf(cur);
+                                const done = i <= curIdx && cur !== "rejected";
+                                return (
+                                  <div key={s} className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
+                                    {done ? <Check className="h-3 w-3" /> : <span className="h-3 w-3 rounded-full border border-slate-300 inline-block" />}
+                                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Create Bill Modal */}
-      <AnimatePresence>
-        {createBillModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative"
-            >
-              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-                <div className="font-bold flex items-center gap-1.5 text-sm">
-                  <Receipt className="w-4.5 h-4.5 text-indigo-400" /> Create Running Account Bill Draft
-                </div>
-                <button onClick={() => setCreateBillModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+      {/* ── MEASUREMENTS TAB ──────────────────────────────────────────────── */}
+      {tab === "measurements" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-800">Site Measurements — {project?.name || "Project"}</h3>
+            <div className="flex gap-2">
+              <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                {verifiedUnbilled.length} verified, unbilled
+              </span>
+              <button
+                onClick={() => setShowAddMeas(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-700"
+              >
+                <Plus className="h-4 w-4" /> Record Measurement
+              </button>
+            </div>
+          </div>
 
-              <form onSubmit={handleSaveBill} className="p-6 space-y-4 text-left text-xs">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+            <strong>Workflow:</strong> Record measurement → Verify it (status: VERIFIED) → Select in RA Bill creation → System computes Previous + This Bill quantities automatically.
+          </div>
+
+          {measLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-slate-500" /></div>
+          ) : measurements.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+              <Ruler className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+              <p className="font-semibold text-slate-600">No measurements yet</p>
+              <p className="mt-1 text-sm text-slate-400">Record site measurements against BOQ items and verify them before creating an RA bill.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase text-slate-500">
+                    <th className="p-3 text-left">Date</th>
+                    <th className="p-3 text-left">BOQ Item</th>
+                    <th className="p-3 text-left">Description/Location</th>
+                    <th className="p-3 text-right">Quantity</th>
+                    <th className="p-3 text-center">Unit</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-center">Billed</th>
+                    <th className="p-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {measurements.map(m => (
+                    <tr key={m.id} className="hover:bg-slate-50">
+                      <td className="p-3 text-slate-700">{m.measurement_date}</td>
+                      <td className="p-3">
+                        <div className="font-medium text-slate-800 line-clamp-1">{m.boq_description}</div>
+                        <div className="text-xs text-slate-400">{m.boq_category}</div>
+                      </td>
+                      <td className="p-3 text-slate-600">{m.description || "—"}</td>
+                      <td className="p-3 text-right font-semibold text-slate-900">{Number(m.quantity).toFixed(3)}</td>
+                      <td className="p-3 text-center text-slate-600">{m.unit}</td>
+                      <td className="p-3 text-center">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${MEAS_STATUS[m.status] || "bg-slate-100 text-slate-700"}`}>
+                          {m.status?.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {m.is_billed ? (
+                          <span className="text-xs font-bold text-emerald-600">✓ Billed</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        {m.status === "draft" && !m.is_billed && (
+                          <div className="flex justify-center gap-1">
+                            <button onClick={() => handleMeasStatus(m, "verified")} title="Verify" className="rounded p-1 text-emerald-600 hover:bg-emerald-50">
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleMeasStatus(m, "rejected")} title="Reject" className="rounded p-1 text-red-500 hover:bg-red-50">
+                              <Ban className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── CREATE RA BILL MODAL ──────────────────────────────────────────── */}
+      {showCreateBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Create RA Bill from Verified Measurements</h3>
+              <button onClick={() => setShowCreateBill(false)}><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+
+            <form onSubmit={handleCreateBill} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Contractor Partner</label>
-                  <select
-                    value={billForm.contractorId}
-                    onChange={(e) => {
-                      const contractorId = e.target.value;
-                      const matchingContract = contracts.find(contract => contract.contractor_id === parseInt(contractorId));
-                      setBillForm(prev => ({ ...prev, contractorId, contractId: matchingContract ? matchingContract.id.toString() : "" }));
-                    }}
-                    className="input-field bg-slate-50"
-                    required
-                  >
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contract</label>
+                  <select value={createBillForm.contractId} onChange={e => setCreateBillForm(f => ({...f, contractId: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required>
+                    <option value="">— Select Contract —</option>
+                    {contracts.map(c => <option key={c.id} value={c.id}>{c.contract_number} ({c.contractor_name || ""})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contractor</label>
+                  <select value={createBillForm.contractorId} onChange={e => setCreateBillForm(f => ({...f, contractorId: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required>
+                    <option value="">— Select Contractor —</option>
                     {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Contract</label>
-                  <select
-                    value={billForm.contractId}
-                    onChange={(e) => setBillForm(prev => ({ ...prev, contractId: e.target.value }))}
-                    className="input-field bg-slate-50"
-                    required
-                  >
-                    <option value="">Select contract</option>
-                    {contracts.filter(contract => !billForm.contractorId || contract.contractor_id === parseInt(billForm.contractorId)).map(contract => (
-                      <option key={contract.id} value={contract.id}>{contract.contract_number} - {contract.contractor_name}</option>
-                    ))}
-                  </select>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Bill Date</label>
+                  <input type="date" value={createBillForm.billDate} onChange={e => setCreateBillForm(f => ({...f, billDate: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Bill Number ID</label>
-                    <input
-                      type="text"
-                      value={billForm.billNumber}
-                      onChange={(e) => setBillForm(prev => ({ ...prev, billNumber: e.target.value }))}
-                      className="input-field"
-                      placeholder="e.g. RAB-03"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Period Start</label>
-                    <input type="date" value={billForm.billingPeriodStart} onChange={(e) => setBillForm(prev => ({ ...prev, billingPeriodStart: e.target.value }))} className="input-field" required />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Period End</label>
-                    <input type="date" value={billForm.billingPeriodEnd} onChange={(e) => setBillForm(prev => ({ ...prev, billingPeriodEnd: e.target.value }))} className="input-field" required />
-                  </div>
-                </div>
-
                 <div>
-                  <label className="block text-slate-500 font-semibold mb-1">Work/Contract Scope Description</label>
-                  <textarea
-                    rows="3"
-                    value={billForm.workDescription}
-                    onChange={(e) => setBillForm(prev => ({ ...prev, workDescription: e.target.value }))}
-                    className="input-field"
-                    placeholder="Provide overview of civil, structural or electrical items completed..."
-                    required
-                  />
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Agreement No.</label>
+                  <input type="text" value={createBillForm.agreementNumber} onChange={e => setCreateBillForm(f => ({...f, agreementNumber: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" placeholder="AGR-001" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {[['advanceRecovery', 'Advance Recovery'], ['penalty', 'Penalty'], ['otherDeduction', 'Other Deduction'], ['taxDeduction', 'Other Tax']].map(([field, label]) => (
-                    <div key={field}>
-                      <label className="block text-slate-500 font-semibold mb-1">{label} (₹)</label>
-                      <input type="number" min="0" step="0.01" value={billForm[field]} onChange={(e) => setBillForm(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }))} className="input-field" />
-                    </div>
-                  ))}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Period Start</label>
+                  <input type="date" value={createBillForm.billingPeriodStart} onChange={e => setCreateBillForm(f => ({...f, billingPeriodStart: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
-
-                <div className="flex justify-end gap-3 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setCreateBillModalOpen(false)}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center gap-1 disabled:opacity-50"
-                  >
-                    {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Create Draft
-                  </button>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Period End</label>
+                  <input type="date" value={createBillForm.billingPeriodEnd} onChange={e => setCreateBillForm(f => ({...f, billingPeriodEnd: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Add Item Modal */}
-      <AnimatePresence>
-        {addItemModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative"
-            >
-              <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-                <div className="font-bold flex items-center gap-1.5 text-sm">
-                  <PlusCircle className="w-4.5 h-4.5 text-indigo-400" /> Certify BOQ Quantity Item
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">GST Rate (%)</label>
+                  <input type="number" min="0" max="100" step="0.01" value={createBillForm.gstRate} onChange={e => setCreateBillForm(f => ({...f, gstRate: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
-                <button onClick={() => setAddItemModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Retention Rate (%)</label>
+                  <input type="number" min="0" max="100" step="0.01" value={createBillForm.retentionRate} onChange={e => setCreateBillForm(f => ({...f, retentionRate: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Other Deductions (₹ flat)</label>
+                  <input type="number" min="0" value={createBillForm.otherDeductions} onChange={e => setCreateBillForm(f => ({...f, otherDeductions: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
+                </div>
               </div>
 
-              <form onSubmit={handleAddItem} className="p-6 space-y-4 text-left text-xs">
-                <div>
-                  <label className="block text-slate-500 font-semibold mb-1">BOQ Reference Item</label>
-                  <select
-                    value={itemForm.boqItemId}
-                    onChange={(e) => handleBoqItemSelect(e.target.value)}
-                    className="input-field bg-slate-50"
-                    required
-                  >
-                    {boqItems.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {item.category}: {item.description} (Max Qty: {item.quantity} {item.unit})
-                      </option>
+              {/* Verified Measurements Selection */}
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-600">
+                  Select Verified (Unbilled) Measurements — {verifiedUnbilled.length} available
+                </label>
+                {verifiedUnbilled.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
+                    No verified unbilled measurements. Go to Site Measurements tab to record and verify measurements first.
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200">
+                    {verifiedUnbilled.map(m => (
+                      <label key={m.id} className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 hover:bg-slate-50 last:border-0">
+                        <input
+                          type="checkbox"
+                          checked={createBillForm.selectedMeasIds.includes(m.id)}
+                          onChange={e => setCreateBillForm(f => ({
+                            ...f,
+                            selectedMeasIds: e.target.checked
+                              ? [...f.selectedMeasIds, m.id]
+                              : f.selectedMeasIds.filter(id => id !== m.id)
+                          }))}
+                        />
+                        <div className="flex-1 text-xs">
+                          <div className="font-medium text-slate-800">{m.boq_description}</div>
+                          <div className="text-slate-500">{m.measurement_date} · {Number(m.quantity).toFixed(3)} {m.unit} {m.description ? `· ${m.description}` : ""}</div>
+                        </div>
+                      </label>
                     ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Quantity Completed</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={itemForm.quantityCompleted}
-                      onChange={(e) => setItemForm(prev => ({ ...prev, quantityCompleted: parseFloat(e.target.value) || 0 }))}
-                      className="input-field"
-                      required
-                    />
                   </div>
-                  <div>
-                    <label className="block text-slate-500 font-semibold mb-1">Contract Rate (₹)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={itemForm.rate}
-                      className="input-field bg-slate-100 cursor-not-allowed"
-                      readOnly
-                    />
-                  </div>
-                </div>
+                )}
+              </div>
 
-                <div className="pt-2 flex items-center justify-between text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                  <span className="font-semibold">Current Certified Valuation:</span>
-                  <span className="font-black text-slate-800 text-sm">
-                    {formatINR(itemForm.quantityCompleted * itemForm.rate)}
-                  </span>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setAddItemModalOpen(false)}
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center gap-1 disabled:opacity-50"
-                  >
-                    {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Add Item
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowCreateBill(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={creating || createBillForm.selectedMeasIds.length === 0}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow hover:bg-slate-700 disabled:opacity-50">
+                  {creating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : "Create RA Bill"}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
+
+      {/* ── ADD MEASUREMENT MODAL ─────────────────────────────────────────── */}
+      {showAddMeas && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">Record Site Measurement</h3>
+              <button onClick={() => setShowAddMeas(false)}><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+
+            <form onSubmit={handleAddMeasurement} className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">BOQ Item</label>
+                <select value={measForm.boqItemId} onChange={e => { const item = boqItems.find(b => String(b.id) === e.target.value); setMeasForm(f => ({...f, boqItemId: e.target.value, unit: item?.unit || ""})); }} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required>
+                  <option value="">— Select BOQ Item —</option>
+                  {boqItems.map(b => <option key={b.id} value={b.id}>{b.description} ({b.unit}) — {Number(b.quantity).toFixed(2)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Measurement Date</label>
+                <input type="date" value={measForm.measurementDate} onChange={e => setMeasForm(f => ({...f, measurementDate: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Quantity</label>
+                <input type="number" step="0.001" min="0.001" value={measForm.quantity} onChange={e => setMeasForm(f => ({...f, quantity: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Unit</label>
+                <input type="text" value={measForm.unit} onChange={e => setMeasForm(f => ({...f, unit: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" placeholder="m³, m², nos, etc." />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Description/Location</label>
+                <input type="text" value={measForm.description} onChange={e => setMeasForm(f => ({...f, description: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" placeholder="e.g. RCC column, 3rd floor, grid A-C" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Recorded By</label>
+                <input type="text" value={measForm.recordedBy} onChange={e => setMeasForm(f => ({...f, recordedBy: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" placeholder="Site Engineer" />
+              </div>
+
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                <button type="button" onClick={() => setShowAddMeas(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={addingMeas} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow hover:bg-slate-700 disabled:opacity-50">
+                  {addingMeas ? <><Loader2 className="h-4 w-4 animate-spin" />Saving...</> : "Save Measurement"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
