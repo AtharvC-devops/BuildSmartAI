@@ -1,0 +1,26 @@
+{
+  "name": "buildsmart-backend",
+  "version": "1.0.0",
+  "description": "BuildSmart AI Backend API",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "test": "node tests/run-tests.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "db:import-sqlite": "node scripts/import-sqlite.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "sql.js": "^1.14.2"
+  }
+}

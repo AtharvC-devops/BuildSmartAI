@@ -1,0 +1,4 @@
+-- BuildSmartAI MySQL schema entrypoint.
+-- The complete schema is in migrations/001_initial.sql.
+-- Use `npm run db:migrate` from backend so credentials come from .env.
+-- This file intentionally contains no duplicate DDL that could drift from the migration.
