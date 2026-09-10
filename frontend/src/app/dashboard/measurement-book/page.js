@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import {
   Ruler,
   Plus,
@@ -180,7 +181,6 @@ export default function MeasurementBookPage() {
 
   // Find active BOQ item object
   const activeBoqItem = useMemo(() => {
-    if (!Array.isArray(boqItems)) return null;
     return boqItems.find((b) => String(b.id) === String(selectedBoqItemId)) || null;
   }, [boqItems, selectedBoqItemId]);
 
@@ -383,9 +383,9 @@ export default function MeasurementBookPage() {
             className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={selectedBoqItemId}
             onChange={(e) => setSelectedBoqItemId(e.target.value)}
-            disabled={loading || !Array.isArray(boqItems) || boqItems.length === 0}
+            disabled={loading || boqItems.length === 0}
           >
-            {!Array.isArray(boqItems) || boqItems.length === 0 ? (
+            {boqItems.length === 0 ? (
               <option value="">No BOQ Items Found</option>
             ) : (
               boqItems.map((b) => (
@@ -397,6 +397,28 @@ export default function MeasurementBookPage() {
           </select>
         </div>
       </div>
+
+      {/* Empty BOQ State Banner */}
+      {!loading && selectedProjectId && boqItems.length === 0 && (
+        <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-8 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto text-amber-600">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">No BOQ items found for this project.</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              Measurement book entries must be linked to a BOQ item. Please create BOQ items for this project in the Cost Estimator module.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/cost-estimator"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Create BOQ Item
+          </Link>
+        </div>
+      )}
 
       {/* Selected BOQ Progress Summary Cards */}
       {activeBoqItem && (
