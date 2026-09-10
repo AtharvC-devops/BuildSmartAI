@@ -167,6 +167,8 @@ export const updateProjectMeasurementStatus = (projectId, measId, status, reject
   request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status, rejectionReason }) });
 export const verifyProjectMeasurement = (projectId, measId, remarks) =>
   request(`/projects/${projectId}/measurements/${measId}/verify`, { method: "PATCH", body: JSON.stringify({ remarks }) });
+export const rejectProjectMeasurement = (projectId, measId, rejectionReason) =>
+  request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status: "REJECTED", rejectionReason }) });
 export const getProjectUnbilledMeasurements = (projectId) =>
   request(`/projects/${projectId}/unbilled-measurements`);
 
