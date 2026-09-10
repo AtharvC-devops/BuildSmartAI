@@ -22,12 +22,14 @@ import {
   FileText,
   Flag,
   Sparkles,
-  LogIn
+  LogIn,
+  Ruler,
 } from "lucide-react";
 
 const builderLinks = [
   { href: "/dashboard",                     label: "Overview",             icon: LayoutDashboard, featureKey: "dashboard" },
   { href: "/dashboard/cost-estimator",      label: "BOQ Estimator",        icon: DollarSign,      featureKey: "boq" },
+  { href: "/dashboard/measurement-book",    label: "Measurement Book",     icon: Ruler,           featureKey: "ra_billing" },
   { href: "/dashboard/daily-logs",          label: "Daily Site Logs",      icon: FileText,        featureKey: "daily_logs" },
   { href: "/dashboard/project-milestones",  label: "Project Milestones",   icon: Flag,            featureKey: "projects" },
   { href: "/dashboard/material-sourcing",   label: "Material Rates",       icon: Hammer,          featureKey: "material_sourcing" },

@@ -1,0 +1,29 @@
+-- Migration 003: Upgrade site_measurements table for Measurement Book fields
+
+DELIMITER $$
+DROP PROCEDURE IF EXISTS upgrade_site_measurements_003$$
+CREATE PROCEDURE upgrade_site_measurements_003()
+BEGIN
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='location') THEN
+    ALTER TABLE site_measurements ADD COLUMN location VARCHAR(255) DEFAULT NULL;
+  END IF;
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='length') THEN
+    ALTER TABLE site_measurements ADD COLUMN length DECIMAL(15,4) DEFAULT NULL;
+  END IF;
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='breadth') THEN
+    ALTER TABLE site_measurements ADD COLUMN breadth DECIMAL(15,4) DEFAULT NULL;
+  END IF;
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='depth_or_height') THEN
+    ALTER TABLE site_measurements ADD COLUMN depth_or_height DECIMAL(15,4) DEFAULT NULL;
+  END IF;
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='number_of_units') THEN
+    ALTER TABLE site_measurements ADD COLUMN number_of_units DECIMAL(15,4) DEFAULT NULL;
+  END IF;
+  IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='site_measurements' AND COLUMN_NAME='remarks') THEN
+    ALTER TABLE site_measurements ADD COLUMN remarks TEXT DEFAULT NULL;
+  END IF;
+END$$
+DELIMITER ;
+
+CALL upgrade_site_measurements_003();
+DROP PROCEDURE IF EXISTS upgrade_site_measurements_003;

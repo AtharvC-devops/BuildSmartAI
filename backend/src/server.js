@@ -9,6 +9,8 @@ const userRoutes = require("./routes/users.routes");
 const authRoutes = require("./routes/auth.routes");
 const portfolioRoutes = require("./routes/portfolio.routes");
 const persistentRoutes = require("./routes/persistent.routes");
+const raBillingRoutes = require("./routes/ra-billing.routes");
+const measurementBookRoutes = require("./routes/measurement-book.routes");
 const errorHandler = require("./middleware/error.middleware");
 
 const app = express();
@@ -18,10 +20,11 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: ["http://localhost:3000", "http://localhost:3001"], credentials: true }));
 app.use(express.json());
 
-// ── Routes ──────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api", aiRoutes);
 app.use("/api", persistentRoutes);
+app.use("/api", measurementBookRoutes);
+app.use("/api", raBillingRoutes);
 app.use("/api", projectRoutes);
 app.use("/api", userRoutes);
 app.use("/api", portfolioRoutes);

@@ -18,6 +18,8 @@ import {
   ChevronRight,
   LogOut,
   User,
+  Receipt,
+  Ruler,
 } from "lucide-react";
 
 const builderLinks = [
@@ -26,6 +28,8 @@ const builderLinks = [
   { href: "/builder/time-prediction",     label: "Time Prediction",      icon: Clock },
   { href: "/builder/resource-allocation", label: "Resource Allocation",  icon: Users },
   { href: "/builder/material-sourcing",   label: "Material Sourcing",    icon: Hammer },
+  { href: "/builder/measurement-book",    label: "Measurement Book",     icon: Ruler },
+  { href: "/builder/ra-billing",          label: "RA Billing",           icon: Receipt },
   { href: "/builder/risk-advisor",        label: "Risk Advisor",         icon: ShieldAlert },
   { href: "/builder/daily-logs",          label: "Daily Logs",           icon: FileText },
   { href: "/builder/project-milestones",  label: "Project Milestones",   icon: Flag },

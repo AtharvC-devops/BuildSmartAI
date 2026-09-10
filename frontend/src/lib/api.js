@@ -24,13 +24,21 @@ async function request(path, options = {}) {
     try {
       errData = await res.json();
     } catch (_) {}
-    throw new Error(errData?.error?.message || `API Error: ${res.status}`);
+    const msg = errData?.error?.message || errData?.message || `API Error: ${res.status}`;
+    const err = new Error(msg);
+    err.code = errData?.error?.code || errData?.code;
+    err.status = res.status;
+    err.details = errData?.error?.details || errData?.details;
+    throw err;
   }
   
   const json = await res.json();
   if (json && typeof json === "object" && "success" in json) {
     if (!json.success) {
-      throw new Error(json.error?.message || "API request failed");
+      const msg = json.error?.message || "API request failed";
+      const err = new Error(msg);
+      err.code = json.error?.code;
+      throw err;
     }
     return json.data;
   }
@@ -113,32 +121,57 @@ export const deleteProjectExpense = (projectId, expenseId) =>
 
 // ── RA Billing Endpoints ────────────────────────────────────────────────
 export const getProjectRABills = (projectId, params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return request(`/projects/${projectId}/ra-bills${query ? "?" + query : ""}`);
+  const qs = new URLSearchParams(params).toString();
+  return request(`/projects/${projectId}/ra-bills${qs ? "?" + qs : ""}`);
 };
+export const getProjectRABill = (projectId, billId) =>
+  request(`/projects/${projectId}/ra-bills/${billId}`);
 export const createProjectRABill = (projectId, data) =>
   request(`/projects/${projectId}/ra-bills`, { method: "POST", body: JSON.stringify(data) });
-export const addProjectRABillItem = (projectId, billId, data) =>
-  request(`/projects/${projectId}/ra-bills/${billId}/items`, { method: "POST", body: JSON.stringify(data) });
 export const updateProjectRABillStatus = (projectId, billId, status, extra = {}) =>
-  request(`/projects/${projectId}/ra-bills/${billId}/status`, { method: "PUT", body: JSON.stringify({ status, ...extra }) });
-export const downloadProjectRABillPdf = async (projectId, billId) => {
+  request(`/projects/${projectId}/ra-bills/${billId}/status`, { method: "PATCH", body: JSON.stringify({ status, ...extra }) });
+export const downloadProjectRABillExcel = async (projectId, billId) => {
   const headers = {};
   try {
-    const savedUser = localStorage.getItem("buildsmart_user");
-    const user = savedUser ? JSON.parse(savedUser) : null;
-    if (user?.id) headers["x-user-id"] = user.id.toString();
+    const u = JSON.parse(localStorage.getItem("buildsmart_user") || "{}");
+    if (u?.id) headers["x-user-id"] = String(u.id);
   } catch (_) {}
-  const response = await fetch(`${API_BASE}/projects/${projectId}/ra-bills/${billId}/pdf`, { headers });
-  if (!response.ok) throw new Error(`API Error: ${response.status}`);
-  return response.blob();
+  const res = await fetch(`${API_BASE}/projects/${projectId}/ra-bills/${billId}/export`, { headers });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  return res.blob();
 };
+// Legacy alias
+export const downloadProjectRABillPdf = (projectId, billId) =>
+  downloadProjectRABillExcel(projectId, billId);
+export const addProjectRABillItem = (projectId, billId, data) =>
+  request(`/projects/${projectId}/ra-bills/${billId}/items`, { method: "POST", body: JSON.stringify(data) });
 export const getProjectContractors = (projectId) =>
   request(`/projects/${projectId}/contractors`);
 export const getProjectContracts = (projectId) =>
   request(`/projects/${projectId}/contracts`);
 export const createProjectContract = (projectId, data) =>
   request(`/projects/${projectId}/contracts`, { method: "POST", body: JSON.stringify(data) });
+
+// ── Site Measurements Endpoints ──────────────────────────────────────────
+export const getProjectMeasurements = (projectId, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request(`/projects/${projectId}/measurements${qs ? "?" + qs : ""}`);
+};
+export const getBOQItemMeasurements = (projectId, boqItemId) =>
+  request(`/projects/${projectId}/boq/${boqItemId}/measurements`);
+export const createProjectMeasurement = (projectId, data) =>
+  request(`/projects/${projectId}/measurements`, { method: "POST", body: JSON.stringify(data) });
+export const updateProjectMeasurement = (projectId, measId, data) =>
+  request(`/projects/${projectId}/measurements/${measId}`, { method: "PUT", body: JSON.stringify(data) });
+export const updateProjectMeasurementStatus = (projectId, measId, status, rejectionReason) =>
+  request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status, rejectionReason }) });
+export const verifyProjectMeasurement = (projectId, measId, remarks) =>
+  request(`/projects/${projectId}/measurements/${measId}/verify`, { method: "PATCH", body: JSON.stringify({ remarks }) });
+export const rejectProjectMeasurement = (projectId, measId, rejectionReason) =>
+  request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status: "REJECTED", rejectionReason }) });
+export const getProjectUnbilledMeasurements = (projectId) =>
+  request(`/projects/${projectId}/unbilled-measurements`);
+
 
 // ── Labour and Muster Roll Endpoints ────────────────────────────────────
 export const getProjectLabour = (projectId, params = {}) => {

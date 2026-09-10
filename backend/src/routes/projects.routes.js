@@ -232,6 +232,7 @@ router.get("/projects/stats", asyncHelper(async (req, res) => {
     totalBudget,
     totalSpent,
     budgetUsage: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
+    // RA Billing routes managed in ra-billing.routes.js
     delayedProjects: delayed,
     completedProjects: completed,
     planningProjects: planning,

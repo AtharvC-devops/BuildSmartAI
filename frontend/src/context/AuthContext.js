@@ -76,7 +76,20 @@ export function AuthProvider({ children }) {
   };
 
   const canAccessFeature = (featureKey) => {
-    if (!user || !user.tierConfig) return false;
+    if (!user) return false;
+    // Core developer features available across all builder scales (SMALL, MID, LARGE)
+    const coreFeatures = [
+      "dashboard",
+      "projects",
+      "boq",
+      "daily_logs",
+      "material_sourcing",
+      "ra_billing",
+      "worker_allocation",
+      "risk_advisory"
+    ];
+    if (coreFeatures.includes(featureKey)) return true;
+    if (!user.tierConfig) return true;
     const allowed = user.tierConfig.allowedFeatures || [];
     return allowed.includes(featureKey) || user.builderScale === "LARGE";
   };

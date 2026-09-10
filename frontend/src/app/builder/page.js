@@ -5,10 +5,11 @@ import {
   AreaChart, Area,
 } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import {
   TrendingUp, DollarSign, AlertTriangle, CheckCircle2,
   Building2, Clock, ArrowUpRight, ArrowDownRight,
-  User, MapPin, Zap, X, Trophy, Briefcase, Star, Loader2
+  User, MapPin, Zap, X, Trophy, Briefcase, Star, Loader2, Receipt
 } from "lucide-react";
 import {
   getProjectStats, getProjects, getMonthlyData,
@@ -272,6 +273,44 @@ export default function BuilderOverviewPage() {
             </table>
           </div>
         )}
+      </motion.div>
+
+      {/* Contractor RA Billing Summary Section */}
+      <motion.div {...fadeIn(6.5)} className="glass-card p-6 border-l-4 border-emerald-500">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-emerald-600" /> Contractor RA Billing & Financial Controls
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">Manage Running Account (RA) bills, BOQ quantity certifications, and contractor disbursements across projects.</p>
+          </div>
+          <Link
+            href="/builder/ra-billing"
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+          >
+            <Receipt className="w-4 h-4" /> Open RA Billing Portal
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Projects</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{projects.length}</div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">RA Bills Status</div>
+            <div className="text-base font-bold text-emerald-600 mt-1">Active & Certified</div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Budget Allocation</div>
+            <div className="text-base font-bold text-slate-900 mt-1">{formatINR(stats?.totalBudget || 0)}</div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Action</div>
+            <Link href="/builder/ra-billing" className="text-xs font-bold text-emerald-700 hover:underline block mt-1">
+              Create New RA Bill &rarr;
+            </Link>
+          </div>
+        </div>
       </motion.div>
 
       {/* Recent Projects Table */}
