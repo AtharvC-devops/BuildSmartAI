@@ -22,7 +22,10 @@ router.put("/projects/:id/milestones", asyncHelper(async (req, res) => {
 
 router.get("/projects/:id/boq", asyncHelper(async (req, res) => {
   const projectId = parseInt(req.params.id);
-  const items = await query("SELECT * FROM boq_items WHERE project_id = ? ORDER BY id", [projectId]);
+  const [items, project] = await Promise.all([
+    query("SELECT * FROM boq_items WHERE project_id = ? ORDER BY id", [projectId]),
+    get("SELECT area FROM projects WHERE id = ?", [projectId])
+  ]);
   const mapped = items.map(item => ({ ...item, projectId: item.project_id, rateSource: item.rate_source, amount: Number(item.total) }));
   const grandTotal = mapped.reduce((sum, item) => sum + Number(item.quantity) * Number(item.rate), 0);
   const categoryGroups = Object.values(mapped.reduce((groups, item) => {
@@ -31,7 +34,21 @@ router.get("/projects/:id/boq", asyncHelper(async (req, res) => {
     groups[item.category].subtotal += Number(item.quantity) * Number(item.rate);
     return groups;
   }, {}));
-  return successResponse(res, { items: mapped, categoryGroups, summary: { grandTotal: round(grandTotal), contingency: round(grandTotal * 0.05), finalEstimatedCost: round(grandTotal * 1.05), costPerSqFt: 0 } });
+  // Cost per sq.ft.: use project area if valid, otherwise return null (frontend renders "N/A")
+  const area = project && Number(project.area) > 0 ? Number(project.area) : null;
+  const costPerSqFt = area !== null ? round(grandTotal / area) : null;
+  // NOTE: boq_items schema has no dedicated cost_type (Material/Labour/Other) column.
+  // We do NOT fabricate a split. materialSubtotal/labourSubtotal/otherSubtotal are omitted.
+  return successResponse(res, {
+    items: mapped,
+    categoryGroups,
+    summary: {
+      grandTotal: round(grandTotal),
+      contingency: round(grandTotal * 0.05),
+      finalEstimatedCost: round(grandTotal * 1.05),
+      costPerSqFt
+    }
+  });
 }));
 
 router.post("/projects/:id/boq", asyncHelper(async (req, res) => {

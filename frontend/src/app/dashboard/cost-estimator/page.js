@@ -319,7 +319,7 @@ export default function CostEstimator() {
       {activeTab === "boq" && (
         <div className="space-y-6">
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          <div className={`grid grid-cols-2 md:grid-cols-4 gap-4`}>
             <div className="glass-card p-4 text-center">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Grand Total</div>
               <div className="text-lg font-black text-slate-800 mt-1">{formatINR(boqData.summary?.grandTotal)}</div>
@@ -334,21 +334,36 @@ export default function CostEstimator() {
             </div>
             <div className="glass-card p-4 text-center">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cost / sq. ft.</div>
-              <div className="text-lg font-black text-slate-800 mt-1">₹{boqData.summary?.costPerSqFt?.toLocaleString("en-IN") || 0}</div>
-            </div>
-            <div className="glass-card p-4 text-center border-t-2 border-t-blue-500">
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Material Cost</div>
-              <div className="text-base font-black text-blue-700 mt-1">{formatINR(boqData.summary?.materialSubtotal)}</div>
-            </div>
-            <div className="glass-card p-4 text-center border-t-2 border-t-emerald-500">
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Labour Cost</div>
-              <div className="text-base font-black text-emerald-700 mt-1">{formatINR(boqData.summary?.labourSubtotal)}</div>
-            </div>
-            <div className="glass-card p-4 text-center border-t-2 border-t-purple-500">
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Other Works</div>
-              <div className="text-base font-black text-purple-700 mt-1">{formatINR(boqData.summary?.otherSubtotal)}</div>
+              <div className="text-lg font-black text-slate-800 mt-1">
+                {boqData.summary?.costPerSqFt != null
+                  ? `₹${Number(boqData.summary.costPerSqFt).toLocaleString("en-IN")}`
+                  : "N/A"}
+              </div>
             </div>
           </div>
+          {/* Material / Labour / Other are only shown when the backend returns them */}
+          {(boqData.summary?.materialSubtotal != null || boqData.summary?.labourSubtotal != null || boqData.summary?.otherSubtotal != null) && (
+            <div className="grid grid-cols-3 gap-4">
+              {boqData.summary?.materialSubtotal != null && (
+                <div className="glass-card p-4 text-center border-t-2 border-t-blue-500">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Material Cost</div>
+                  <div className="text-base font-black text-blue-700 mt-1">{formatINR(boqData.summary.materialSubtotal)}</div>
+                </div>
+              )}
+              {boqData.summary?.labourSubtotal != null && (
+                <div className="glass-card p-4 text-center border-t-2 border-t-emerald-500">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Labour Cost</div>
+                  <div className="text-base font-black text-emerald-700 mt-1">{formatINR(boqData.summary.labourSubtotal)}</div>
+                </div>
+              )}
+              {boqData.summary?.otherSubtotal != null && (
+                <div className="glass-card p-4 text-center border-t-2 border-t-purple-500">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Other Works</div>
+                  <div className="text-base font-black text-purple-700 mt-1">{formatINR(boqData.summary.otherSubtotal)}</div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Table */}
           <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
