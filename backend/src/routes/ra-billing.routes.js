@@ -219,84 +219,111 @@ router.post("/projects/:id/ra-bills", asyncWrap(async (req, res) => {
   if (!contractId || !contractorId) {
     throw { status: 400, code: "MISSING_FIELDS", message: "contractId and contractorId are required" };
   }
-  if (!measurementIds || measurementIds.length === 0) {
+  if (!measurementIds || !Array.isArray(measurementIds) || measurementIds.length === 0) {
     throw { status: 400, code: "NO_MEASUREMENTS", message: "At least one verified measurement must be selected" };
   }
-
-  // Validate all measurements are VERIFIED and not already billed
-  const placeholders = measurementIds.map(() => "?").join(",");
-  const measurements = await query(
-    `SELECT sm.*, bi.quantity AS boq_contract_qty, bi.rate AS boq_rate, bi.unit AS boq_unit, bi.description AS boq_description
-     FROM site_measurements sm
-     JOIN boq_items bi ON bi.id = sm.boq_item_id
-     WHERE sm.id IN (${placeholders}) AND sm.project_id = ?`,
-    [...measurementIds.map(Number), projectId]
-  );
-
-  for (const m of measurements) {
-    if (normalizeStatus(m.status) !== "verified") {
-      throw { status: 400, code: "UNVERIFIED_MEASUREMENT", message: `Measurement ID ${m.id} is not VERIFIED (status: ${m.status}). Only verified measurements can be billed.` };
-    }
-    if (m.is_billed) {
-      throw { status: 409, code: "ALREADY_BILLED", message: `Measurement ID ${m.id} has already been included in a previous RA bill. Double-billing is not allowed.` };
-    }
-  }
-
-  // Group measurements by boq_item_id → sum quantities for this bill
-  const byBoqItem = {};
-  for (const m of measurements) {
-    if (!byBoqItem[m.boq_item_id]) {
-      byBoqItem[m.boq_item_id] = {
-        boqItemId:    m.boq_item_id,
-        description:  m.boq_description,
-        unit:         m.boq_unit || m.unit,
-        contractQty:  fmt(m.boq_contract_qty),
-        rate:         fmt(m.boq_rate),
-        thisBillQty:  0,
-        measurementIds: []
-      };
-    }
-    byBoqItem[m.boq_item_id].thisBillQty  = fmt(byBoqItem[m.boq_item_id].thisBillQty + Number(m.quantity));
-    byBoqItem[m.boq_item_id].measurementIds.push(m.id);
-  }
-
-  // Fetch previous cumulative quantities for each BOQ item
-  const lineItems = [];
-  for (const [boqItemId, item] of Object.entries(byBoqItem)) {
-    const previousQty = await getPreviousQty(projectId, parseInt(boqItemId));
-    const totalQty    = fmt(previousQty + item.thisBillQty);
-
-    // Enforce: Total Qty cannot exceed BOQ contract quantity
-    if (totalQty > item.contractQty + 0.0001) { // small epsilon for float
-      throw {
-        status: 400,
-        code: "QUANTITY_EXCEEDS_BOQ",
-        message: `BOQ item "${item.description}": cumulative quantity (${totalQty} ${item.unit}) would exceed BOQ contract quantity (${item.contractQty} ${item.unit}). Create a Variation Order first.`
-      };
-    }
-
-    lineItems.push({
-      ...item,
-      previousQty,
-      totalQty,
-      previousAmount:  fmt(previousQty * item.rate),
-      thisBillAmount:  fmt(item.thisBillQty * item.rate),
-      totalAmount:     fmt(totalQty * item.rate)
-    });
-  }
-
-  // Compute financial totals
-  const subtotal       = fmt(lineItems.reduce((s, i) => s + i.thisBillAmount, 0));
-  const gstAmount      = fmt(subtotal * Number(gstRate) / 100);
-  const retentionAmt   = fmt(subtotal * Number(retentionRate) / 100);
-  const otherDeductAmt = fmt(Number(otherDeductions));
-  const netPayable     = fmt(subtotal + gstAmount - retentionAmt - otherDeductAmt);
 
   const { billNumber, seq } = await nextBillNumber(projectId);
   const today = new Date().toISOString().split("T")[0];
 
   const result = await withTransaction(async (tx) => {
-    // Insert the bill
+    // 1. Transactional validation of selected measurements
+    const placeholders = measurementIds.map(() => "?").join(",");
+    const measurements = await tx.query(
+      `SELECT sm.*, bi.quantity AS boq_contract_qty, bi.rate AS boq_rate, bi.unit AS boq_unit, bi.description AS boq_description, bi.project_id AS boq_project_id
+       FROM site_measurements sm
+       JOIN boq_items bi ON bi.id = sm.boq_item_id
+       WHERE sm.id IN (${placeholders}) AND sm.project_id = ?`,
+      [...measurementIds.map(Number), projectId]
+    );
+
+    if (measurements.length !== measurementIds.length) {
+      throw {
+        status: 400,
+        code: "INVALID_MEASUREMENTS",
+        message: "One or more selected measurements do not exist or do not belong to this project"
+      };
+    }
+
+    for (const m of measurements) {
+      if (normalizeStatus(m.status) !== "VERIFIED" && normalizeStatus(m.status) !== "verified") {
+        throw {
+          status: 400,
+          code: "UNVERIFIED_MEASUREMENT",
+          message: `Measurement ID ${m.id} is not VERIFIED (status: ${m.status}). Only verified measurements can be billed.`
+        };
+      }
+      if (m.is_billed || m.ra_bill_id !== null || m.ra_bill_item_id !== null) {
+        throw {
+          status: 400,
+          code: "ALREADY_BILLED",
+          message: `Measurement ID ${m.id} has already been included in an RA bill. Double-billing is prohibited.`
+        };
+      }
+    }
+
+    // 2. Group measurements by boq_item_id → sum quantities for this bill
+    const byBoqItem = {};
+    for (const m of measurements) {
+      if (!byBoqItem[m.boq_item_id]) {
+        byBoqItem[m.boq_item_id] = {
+          boqItemId:    m.boq_item_id,
+          description:  m.boq_description,
+          unit:         m.boq_unit || m.unit,
+          contractQty:  fmt(m.boq_contract_qty),
+          rate:         fmt(m.boq_rate), // BOQ contract rate enforced
+          thisBillQty:  0,
+          measurementIds: []
+        };
+      }
+      byBoqItem[m.boq_item_id].thisBillQty = fmt(byBoqItem[m.boq_item_id].thisBillQty + Number(m.quantity));
+      byBoqItem[m.boq_item_id].measurementIds.push(m.id);
+    }
+
+    // 3. Fetch previous cumulative quantities for each BOQ item & validate BOQ contract cap
+    const lineItems = [];
+    for (const [boqItemIdStr, item] of Object.entries(byBoqItem)) {
+      const bId = parseInt(boqItemIdStr);
+      
+      // Calculate previous quantity from non-rejected, non-draft bills
+      const prevRow = await tx.get(
+        `SELECT COALESCE(SUM(rbi.current_quantity), 0) AS prev_qty
+         FROM ra_bill_items rbi
+         JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+         WHERE rb.project_id = ?
+           AND rbi.boq_item_id = ?
+           AND rb.status NOT IN ('rejected', 'draft')`,
+        [projectId, bId]
+      );
+      const previousQty = fmt(prevRow?.prev_qty ?? 0);
+      const totalQty    = fmt(previousQty + item.thisBillQty);
+
+      if (totalQty > item.contractQty + 0.0001) {
+        throw {
+          status: 400,
+          code: "QUANTITY_EXCEEDS_BOQ",
+          message: `BOQ item "${item.description}": cumulative quantity (${totalQty} ${item.unit}) would exceed BOQ contract quantity (${item.contractQty} ${item.unit}).`
+        };
+      }
+
+      lineItems.push({
+        ...item,
+        previousQty,
+        totalQty,
+        previousAmount:  fmt(previousQty * item.rate),
+        thisBillAmount:  fmt(item.thisBillQty * item.rate),
+        totalAmount:     fmt(totalQty * item.rate)
+      });
+    }
+
+    // 4. Compute financial totals
+    const subtotal       = fmt(lineItems.reduce((s, i) => s + i.thisBillAmount, 0));
+    const gstAmount      = fmt(subtotal * Number(gstRate) / 100);
+    const retentionAmt   = fmt(subtotal * Number(retentionRate) / 100);
+    const otherDeductAmt = fmt(Number(otherDeductions));
+    const netPayable     = fmt(subtotal + gstAmount - retentionAmt - otherDeductAmt);
+
+    // 5. Insert RA bill header
     const billRes = await tx.run(
       `INSERT INTO ra_bills
          (project_id, contract_id, contractor_id, bill_number, bill_sequence, agreement_number,
@@ -331,9 +358,9 @@ router.post("/projects/:id/ra-bills", asyncWrap(async (req, res) => {
     );
     const billId = billRes.lastInsertRowid;
 
-    // Insert line items
+    // 6. Insert RA bill line items & link measurements to exact ra_bill_item_id
     for (const item of lineItems) {
-      await tx.run(
+      const itemRes = await tx.run(
         `INSERT INTO ra_bill_items
            (ra_bill_id, boq_item_id, description, unit,
             contract_quantity, previously_billed_quantity, previous_billed_amount,
@@ -356,28 +383,28 @@ router.post("/projects/:id/ra-bills", asyncWrap(async (req, res) => {
           item.totalAmount
         ]
       );
-    }
+      const raBillItemId = itemRes.lastInsertRowid;
 
-    // Mark measurements as billed
-    for (const measId of measurementIds) {
-      await tx.run(
-        "UPDATE site_measurements SET is_billed = 1, ra_bill_id = ? WHERE id = ?",
-        [billId, parseInt(measId)]
-      );
+      // Mark measurements linked to this specific ra_bill_item_id
+      for (const measId of item.measurementIds) {
+        await tx.run(
+          "UPDATE site_measurements SET is_billed = 1, ra_bill_id = ?, ra_bill_item_id = ? WHERE id = ?",
+          [billId, raBillItemId, parseInt(measId)]
+        );
+      }
     }
 
     return billId;
   });
 
   const created = await get("SELECT * FROM ra_bills WHERE id = ?", [result]);
-  return successResponse(res, { bill: created, billNumber, netPayable }, 201);
+  return successResponse(res, { bill: created, billNumber, netPayable: created.net_payable }, 201);
 }));
 
 /**
  * PATCH /api/projects/:id/ra-bills/:billId/status
- * Transition RA bill status: submitted → verified → certified → paid
- *
- * Body: { status, reason?, paymentDate?, paymentReference? }
+ * Transition RA bill status: draft → submitted → verified → certified → paid (or rejected)
+ * When rejected, linked measurements are released atomically.
  */
 router.patch("/projects/:id/ra-bills/:billId/status", asyncWrap(async (req, res) => {
   const projectId = parseInt(req.params.id);
@@ -396,25 +423,92 @@ router.patch("/projects/:id/ra-bills/:billId/status", asyncWrap(async (req, res)
     };
   }
 
-  await run(
-    "UPDATE ra_bills SET status = ?, rejection_reason = ? WHERE id = ?",
-    [newStatus, reason || null, billId]
-  );
+  await withTransaction(async (tx) => {
+    await tx.run(
+      "UPDATE ra_bills SET status = ?, rejection_reason = ? WHERE id = ?",
+      [newStatus, reason || null, billId]
+    );
 
-  // If transitioning to paid, log a payment record
-  if (newStatus === "paid" && paymentDate) {
-    const ref = paymentReference || `PAY-${billId}-${Date.now()}`;
-    const existing = await get("SELECT id FROM ra_bill_payments WHERE ra_bill_id = ?", [billId]);
-    if (!existing) {
-      await run(
-        "INSERT INTO ra_bill_payments (ra_bill_id, payment_date, payment_reference, amount, payment_status) VALUES (?, ?, ?, ?, 'completed')",
-        [billId, paymentDate, ref, bill.net_payable]
+    // If bill is rejected, release ONLY measurements linked to this specific RA bill
+    if (newStatus === "rejected") {
+      await tx.run(
+        "UPDATE site_measurements SET is_billed = 0, ra_bill_id = NULL, ra_bill_item_id = NULL WHERE ra_bill_id = ?",
+        [billId]
       );
     }
-  }
+
+    // If transitioning to paid, log a payment record
+    if (newStatus === "paid" && paymentDate) {
+      const ref = paymentReference || `PAY-${billId}-${Date.now()}`;
+      const existing = await tx.get("SELECT id FROM ra_bill_payments WHERE ra_bill_id = ?", [billId]);
+      if (!existing) {
+        await tx.run(
+          "INSERT INTO ra_bill_payments (ra_bill_id, payment_date, payment_reference, amount, payment_status) VALUES (?, ?, ?, ?, 'completed')",
+          [billId, paymentDate, ref, bill.net_payable]
+        );
+      }
+    }
+  });
 
   const updated = await get("SELECT * FROM ra_bills WHERE id = ?", [billId]);
   return successResponse(res, { bill: updated, statusLabel: STATUS_LABELS[newStatus] });
+}));
+
+/**
+ * DELETE /api/projects/:id/ra-bills/:billId
+ * Delete a DRAFT RA bill and release its linked measurements
+ */
+router.delete("/projects/:id/ra-bills/:billId", asyncWrap(async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const billId    = parseInt(req.params.billId);
+
+  const bill = await get("SELECT * FROM ra_bills WHERE id = ? AND project_id = ?", [billId, projectId]);
+  if (!bill) throw { status: 404, code: "BILL_NOT_FOUND", message: "RA Bill not found" };
+
+  if (normalizeStatus(bill.status) !== "draft") {
+    throw { status: 400, code: "CANNOT_DELETE_NON_DRAFT", message: "Only DRAFT RA bills can be deleted" };
+  }
+
+  await withTransaction(async (tx) => {
+    // Release measurements linked to this draft bill
+    await tx.run(
+      "UPDATE site_measurements SET is_billed = 0, ra_bill_id = NULL, ra_bill_item_id = NULL WHERE ra_bill_id = ?",
+      [billId]
+    );
+    // Delete line items and bill header
+    await tx.run("DELETE FROM ra_bill_items WHERE ra_bill_id = ?", [billId]);
+    await tx.run("DELETE FROM ra_bills WHERE id = ?", [billId]);
+  });
+
+  return successResponse(res, { message: `RA Bill #${billId} deleted and linked measurements released` });
+}));
+
+/**
+ * GET /api/projects/:id/unbilled-measurements
+ * Get all VERIFIED unbilled site measurements ready for RA billing
+ */
+router.get("/projects/:id/unbilled-measurements", asyncWrap(async (req, res) => {
+  const projectId = parseInt(req.params.id);
+
+  const rows = await query(
+    `SELECT sm.*,
+            bi.description AS boq_description,
+            bi.category    AS boq_category,
+            bi.unit        AS boq_unit,
+            bi.rate        AS boq_rate,
+            bi.quantity    AS boq_contract_qty
+     FROM site_measurements sm
+     JOIN boq_items bi ON bi.id = sm.boq_item_id
+     WHERE sm.project_id = ?
+       AND LOWER(sm.status) = 'verified'
+       AND sm.is_billed = 0
+       AND sm.ra_bill_id IS NULL
+       AND sm.ra_bill_item_id IS NULL
+     ORDER BY sm.boq_item_id ASC, sm.measurement_date ASC`,
+    [projectId]
+  );
+
+  return successResponse(res, rows);
 }));
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -16,6 +16,7 @@ import {
   Check,
   X,
   Layers,
+  Save,
   ChevronRight
 } from "lucide-react";
 import {
@@ -665,7 +666,7 @@ export default function MeasurementBookPage() {
               disabled={submitting}
               className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md transition-all disabled:opacity-50"
             >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <SaveIcon className="w-4 h-4" />}
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save Measurement Entry
             </button>
           </div>

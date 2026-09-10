@@ -10,7 +10,7 @@ import {
   getProjectContracts, getProjectRABills, getProjectRABill,
   createProjectRABill, updateProjectRABillStatus,
   downloadProjectRABillExcel,
-  getProjectMeasurements, createProjectMeasurement, updateProjectMeasurementStatus
+  getProjectMeasurements, getProjectUnbilledMeasurements, createProjectMeasurement, updateProjectMeasurementStatus
 } from "@/lib/api";
 
 function formatINR(n) {
@@ -583,23 +583,27 @@ export default function RABillingPage() {
       {/* ── CREATE RA BILL MODAL ──────────────────────────────────────────── */}
       {showCreateBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Create RA Bill from Verified Measurements</h3>
+          <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Create RA Bill from Verified Measurements</h3>
+                <p className="text-xs text-slate-500">Select verified site measurements to aggregate into RA bill items</p>
+              </div>
               <button onClick={() => setShowCreateBill(false)}><X className="h-5 w-5 text-slate-400" /></button>
             </div>
 
-            <form onSubmit={handleCreateBill} className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <form onSubmit={handleCreateBill} className="space-y-5">
+              {/* Bill Details */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contract</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contract *</label>
                   <select value={createBillForm.contractId} onChange={e => setCreateBillForm(f => ({...f, contractId: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required>
                     <option value="">— Select Contract —</option>
                     {contracts.map(c => <option key={c.id} value={c.id}>{c.contract_number} ({c.contractor_name || ""})</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contractor</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Contractor *</label>
                   <select value={createBillForm.contractorId} onChange={e => setCreateBillForm(f => ({...f, contractorId: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" required>
                     <option value="">— Select Contractor —</option>
                     {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -629,51 +633,180 @@ export default function RABillingPage() {
                   <label className="mb-1 block text-xs font-semibold text-slate-600">Retention Rate (%)</label>
                   <input type="number" min="0" max="100" step="0.01" value={createBillForm.retentionRate} onChange={e => setCreateBillForm(f => ({...f, retentionRate: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-semibold text-slate-600">Other Deductions (₹ flat)</label>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-600">Other Deductions (₹)</label>
                   <input type="number" min="0" value={createBillForm.otherDeductions} onChange={e => setCreateBillForm(f => ({...f, otherDeductions: e.target.value}))} className="w-full rounded-lg border border-slate-200 p-2 text-sm" />
                 </div>
               </div>
 
-              {/* Verified Measurements Selection */}
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-slate-600">
-                  Select Verified (Unbilled) Measurements — {verifiedUnbilled.length} available
-                </label>
+              {/* 1. Select Measurements for This Bill Section */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Select Measurements for This Bill</h4>
+                  {verifiedUnbilled.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allSelected = verifiedUnbilled.length > 0 && createBillForm.selectedMeasIds.length === verifiedUnbilled.length;
+                        setCreateBillForm(f => ({
+                          ...f,
+                          selectedMeasIds: allSelected ? [] : verifiedUnbilled.map(m => m.id)
+                        }));
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:underline"
+                    >
+                      {createBillForm.selectedMeasIds.length === verifiedUnbilled.length ? "Deselect All" : "Select All Verified"}
+                    </button>
+                  )}
+                </div>
+
                 {verifiedUnbilled.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
-                    No verified unbilled measurements. Go to Site Measurements tab to record and verify measurements first.
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                    No verified unbilled measurements available. Go to Site Measurements tab to record and verify measurements.
                   </div>
                 ) : (
-                  <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200">
-                    {verifiedUnbilled.map(m => (
-                      <label key={m.id} className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 hover:bg-slate-50 last:border-0">
-                        <input
-                          type="checkbox"
-                          checked={createBillForm.selectedMeasIds.includes(m.id)}
-                          onChange={e => setCreateBillForm(f => ({
-                            ...f,
-                            selectedMeasIds: e.target.checked
-                              ? [...f.selectedMeasIds, m.id]
-                              : f.selectedMeasIds.filter(id => id !== m.id)
-                          }))}
-                        />
-                        <div className="flex-1 text-xs">
-                          <div className="font-medium text-slate-800">{m.boq_description}</div>
-                          <div className="text-slate-500">{m.measurement_date} · {Number(m.quantity).toFixed(3)} {m.unit} {m.description ? `· ${m.description}` : ""}</div>
-                        </div>
-                      </label>
-                    ))}
+                  <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 text-slate-600 sticky top-0 border-b border-slate-200">
+                        <tr>
+                          <th className="p-2 text-center w-8">Select</th>
+                          <th className="p-2 text-left">ID</th>
+                          <th className="p-2 text-left">Date</th>
+                          <th className="p-2 text-left">BOQ Item</th>
+                          <th className="p-2 text-left">Description / Location</th>
+                          <th className="p-2 text-right">Quantity</th>
+                          <th className="p-2 text-center">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {verifiedUnbilled.map(m => {
+                          const isChecked = createBillForm.selectedMeasIds.includes(m.id);
+                          return (
+                            <tr key={m.id} className={`hover:bg-slate-50 cursor-pointer ${isChecked ? "bg-blue-50/50" : ""}`}
+                              onClick={() => {
+                                setCreateBillForm(f => ({
+                                  ...f,
+                                  selectedMeasIds: isChecked
+                                    ? f.selectedMeasIds.filter(id => id !== m.id)
+                                    : [...f.selectedMeasIds, m.id]
+                                }));
+                              }}
+                            >
+                              <td className="p-2 text-center" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={e => setCreateBillForm(f => ({
+                                    ...f,
+                                    selectedMeasIds: e.target.checked
+                                      ? [...f.selectedMeasIds, m.id]
+                                      : f.selectedMeasIds.filter(id => id !== m.id)
+                                  }))}
+                                />
+                              </td>
+                              <td className="p-2 font-mono text-slate-500">#{m.id}</td>
+                              <td className="p-2 text-slate-700">{m.measurement_date}</td>
+                              <td className="p-2 font-semibold text-slate-800">{m.boq_description}</td>
+                              <td className="p-2 text-slate-600">{m.description || m.location || "—"}</td>
+                              <td className="p-2 text-right font-bold text-slate-900">{Number(m.quantity).toFixed(3)}</td>
+                              <td className="p-2 text-center text-slate-500">{m.unit}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
 
-              {error && <p className="text-xs text-red-600">{error}</p>}
+              {/* 2. Group Selected Measurements by BOQ Item Preview */}
+              {createBillForm.selectedMeasIds.length > 0 && (() => {
+                // Group selected measurements
+                const selectedMeasList = verifiedUnbilled.filter(m => createBillForm.selectedMeasIds.includes(m.id));
+                const boqGroupMap = {};
+                for (const m of selectedMeasList) {
+                  const item = boqItems.find(b => Number(b.id) === Number(m.boq_item_id));
+                  const boqId = m.boq_item_id;
+                  if (!boqGroupMap[boqId]) {
+                    boqGroupMap[boqId] = {
+                      boqItemId: boqId,
+                      description: m.boq_description || item?.description || `BOQ Item #${boqId}`,
+                      unit: m.unit || item?.unit || "",
+                      contractQty: Number(item?.quantity || 0),
+                      rate: Number(item?.rate || 0),
+                      thisBillQty: 0
+                    };
+                  }
+                  boqGroupMap[boqId].thisBillQty += Number(m.quantity || 0);
+                }
+
+                const groupedItems = Object.values(boqGroupMap);
+                let totalEstimatedAmount = 0;
+                let hasCapExceeded = false;
+
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Live BOQ Billing Abstract Preview</h4>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-slate-800 text-white">
+                            <th className="p-2 text-left">BOQ Description</th>
+                            <th className="p-2 text-center">Unit</th>
+                            <th className="p-2 text-right">Contract Qty</th>
+                            <th className="p-2 text-right bg-blue-900">This Bill Qty</th>
+                            <th className="p-2 text-right">Contract Rate</th>
+                            <th className="p-2 text-right bg-emerald-900">Estimated Bill Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupedItems.map(g => {
+                            const amt = g.thisBillQty * g.rate;
+                            totalEstimatedAmount += amt;
+                            const isExceeded = g.contractQty > 0 && g.thisBillQty > g.contractQty;
+                            if (isExceeded) hasCapExceeded = true;
+                            return (
+                              <tr key={g.boqItemId} className={`border-b border-slate-100 ${isExceeded ? "bg-red-50 text-red-700" : ""}`}>
+                                <td className="p-2 font-medium text-slate-800">{g.description}</td>
+                                <td className="p-2 text-center text-slate-600">{g.unit}</td>
+                                <td className="p-2 text-right text-slate-600">{g.contractQty.toFixed(3)}</td>
+                                <td className="p-2 text-right font-bold text-blue-700 bg-blue-50">{g.thisBillQty.toFixed(3)}</td>
+                                <td className="p-2 text-right text-slate-700">{formatINR(g.rate)}</td>
+                                <td className="p-2 text-right font-bold text-emerald-700 bg-emerald-50">{formatINR(amt)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-100 font-bold">
+                            <td colSpan={5} className="p-2 text-right text-slate-700">Estimated Gross Amount:</td>
+                            <td className="p-2 text-right text-emerald-700 font-black">{formatINR(totalEstimatedAmount)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {hasCapExceeded && (
+                      <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-700">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        Warning: Selected measurement quantity exceeds contract quantity for one or more BOQ items.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {error && (
+                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
                 <button type="button" onClick={() => setShowCreateBill(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Cancel</button>
                 <button type="submit" disabled={creating || createBillForm.selectedMeasIds.length === 0}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white shadow hover:bg-slate-700 disabled:opacity-50">
-                  {creating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating...</> : "Create RA Bill"}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-bold text-white shadow hover:bg-slate-700 disabled:opacity-50">
+                  {creating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating RA Bill...</> : "Generate RA Bill"}
                 </button>
               </div>
             </form>

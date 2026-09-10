@@ -167,8 +167,8 @@ export const updateProjectMeasurementStatus = (projectId, measId, status, reject
   request(`/projects/${projectId}/measurements/${measId}/status`, { method: "PATCH", body: JSON.stringify({ status, rejectionReason }) });
 export const verifyProjectMeasurement = (projectId, measId, remarks) =>
   request(`/projects/${projectId}/measurements/${measId}/verify`, { method: "PATCH", body: JSON.stringify({ remarks }) });
-export const rejectProjectMeasurement = (projectId, measId, remarks) =>
-  request(`/projects/${projectId}/measurements/${measId}/reject`, { method: "PATCH", body: JSON.stringify({ remarks }) });
+export const getProjectUnbilledMeasurements = (projectId) =>
+  request(`/projects/${projectId}/unbilled-measurements`);
 
 
 // ── Labour and Muster Roll Endpoints ────────────────────────────────────
